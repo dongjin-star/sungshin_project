@@ -23,9 +23,6 @@ import { MA_LONG, MA_SHORT, gapRatio, sma, withLiveClose } from "./ma";
 import { detectCross } from "./cross";
 import { canComputeTrend, resolvePeriod } from "./requirements";
 
-/** 화면 3 미니 차트가 그리는 구간 (§5.4-a) */
-export const MA_SERIES_LENGTH = 60;
-
 export interface AnalyzeInput {
   /** 과거 → 최신 오름차순. 결측일(휴장·거래정지)은 이미 제외되어 있어야 한다 (§7.1) */
   candles: readonly Candle[];
@@ -100,10 +97,20 @@ export function analyzePosition(
 }
 
 /**
- * 추세 계산. 기간 토글과 무관하다 — MA20/60 은 고정이다 (§7.4).
+ * 추세 계산.
+ *
+ * maShort/maLong/alignment/cross 는 기간 토글과 무관하다 — MA20/60 비교
+ * 자체는 고정이다. `maSeries` 만 기간별로 갈라 담는다 (§5.4-a, `TrendBlock`
+ * 주석 참고) — 세 기간을 한 번에 계산해 토글을 네트워크 0회로 만든다.
  */
 export function analyzeTrend(input: AnalyzeInput): TrendBlock {
   const { candles, current, isRealtime, halted } = input;
+
+  const emptyMaSeries = (): TrendBlock["maSeries"] => {
+    const out = {} as TrendBlock["maSeries"];
+    for (const period of PERIOD_OPTIONS) out[period] = [];
+    return out;
+  };
 
   const unavailable = (reason: "INSUFFICIENT_DATA" | "HALTED"): TrendBlock => ({
     available: false,
@@ -113,7 +120,7 @@ export function analyzeTrend(input: AnalyzeInput): TrendBlock {
     alignment: null,
     gapRatio: null,
     cross: null,
-    maSeries: [],
+    maSeries: emptyMaSeries(),
   });
 
   if (halted) return unavailable("HALTED");
@@ -145,13 +152,20 @@ export function analyzeTrend(input: AnalyzeInput): TrendBlock {
 
   const cross = detectCross({ dates, maShort: shortSeries, maLong: longSeries, volumes });
 
-  // 미니 차트용 최근 60일. 두 MA가 모두 잡히는 구간만 넘긴다.
-  const maSeries: TrendBlock["maSeries"] = [];
-  for (let i = Math.max(0, closes.length - MA_SERIES_LENGTH); i <= last; i += 1) {
-    const s = shortSeries[i];
-    const l = longSeries[i];
-    if (s == null || l == null) continue;
-    maSeries.push({ date: dates[i]!, short: s, long: l });
+  // 미니 차트용 시계열. 두 MA가 모두 잡히는 구간만 넘긴다. 기간 토글이
+  // 고르는 건 "몇 거래일을 보여줄지"이지, MA20/60 이라는 비교 대상 자체가
+  // 아니다 — 60일 창을 60일 SMA로 채우려는 게 아니라, 같은 MA20 vs MA60
+  // 관계를 더 긴 시야에서 보여주는 것뿐이다.
+  const maSeries = {} as TrendBlock["maSeries"];
+  for (const period of PERIOD_OPTIONS) {
+    const series: TrendBlock["maSeries"][PeriodDays] = [];
+    for (let i = Math.max(0, closes.length - period); i <= last; i += 1) {
+      const s = shortSeries[i];
+      const l = longSeries[i];
+      if (s == null || l == null) continue;
+      series.push({ date: dates[i]!, short: s, long: l });
+    }
+    maSeries[period] = series;
   }
 
   return { available: true, maShort, maLong, alignment, gapRatio: gap, cross, maSeries };

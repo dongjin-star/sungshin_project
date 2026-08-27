@@ -464,16 +464,57 @@ describe("analyzeTrend", () => {
     expect(trend.gapRatio).toBeLessThan(0);
   });
 
-  it("미니 차트 시계열은 최대 60개다 (§5.4-a)", () => {
-    const rising = Array.from({ length: 200 }, (_, i) => 100 + i);
+  it("미니 차트 시계열은 기간별로 갈라 담긴다 — 각자 그 기간을 넘지 않는다 (§5.4-a)", () => {
+    const rising = Array.from({ length: 400 }, (_, i) => 100 + i);
     const trend = analyzeTrend({
       candles: candlesSeq(rising),
-      current: 299,
+      current: 499,
       isRealtime: false,
       halted: false,
     });
-    expect(trend.maSeries.length).toBeLessThanOrEqual(60);
-    expect(trend.maSeries.length).toBeGreaterThan(0);
+    for (const period of [60, 120, 250] as const) {
+      expect(trend.maSeries[period].length).toBeLessThanOrEqual(period);
+      expect(trend.maSeries[period].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("기간 토글이 실제로 창 길이를 바꾼다 — MA20/60 비교 대상 자체는 그대로다", () => {
+    // 흐름 탭의 기간 토글이 하는 일은 이것 하나다: 같은 MA20 vs MA60 관계를
+    // 더 긴/짧은 창으로 보여준다. 세 시리즈가 전부 같은 마지막 값(오늘의
+    // MA20·MA60)으로 끝나야 하고, 창 길이만 늘어나야 한다.
+    const rising = Array.from({ length: 400 }, (_, i) => 100 + i);
+    const trend = analyzeTrend({
+      candles: candlesSeq(rising),
+      current: 499,
+      isRealtime: false,
+      halted: false,
+    });
+
+    const s60 = trend.maSeries[60];
+    const s120 = trend.maSeries[120];
+    const s250 = trend.maSeries[250];
+
+    expect(s60.length).toBeLessThan(s120.length);
+    expect(s120.length).toBeLessThan(s250.length);
+
+    // 같은 종목의 "오늘" 데이터이므로 마지막 값은 세 창 모두 동일하다
+    expect(s60.at(-1)).toEqual(s120.at(-1));
+    expect(s120.at(-1)).toEqual(s250.at(-1));
+  });
+
+  it("보유 봉이 요청 기간보다 적으면 있는 만큼만 담는다", () => {
+    // 150봉만 있는 종목: 60일 창은 요청한 만큼 꽉 채울 수 있지만, 250일
+    // 창은 애초에 그만한 데이터가 없다 — 잘라내기가 아니라 있는 만큼만
+    // 정직하게 담아야 한다 (PP-03 과 같은 정신).
+    const rising = Array.from({ length: 150 }, (_, i) => 100 + i);
+    const trend = analyzeTrend({
+      candles: candlesSeq(rising),
+      current: 249,
+      isRealtime: false,
+      halted: false,
+    });
+    expect(trend.maSeries[60].length).toBe(60);
+    expect(trend.maSeries[250].length).toBeLessThan(250);
   });
 });
 

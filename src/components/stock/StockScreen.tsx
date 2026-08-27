@@ -218,6 +218,8 @@ export function StockScreen({ symbol }: { symbol: string }) {
           explanation={explanation}
           currency={data.currency}
           haltedLabel={haltedLabel}
+          period={period}
+          onPeriodChange={setPeriod}
         />
       )}
 

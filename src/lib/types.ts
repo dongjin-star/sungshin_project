@@ -78,7 +78,15 @@ export interface CrossInfo {
   volumeConfirmed: boolean;
 }
 
-/** 추세 계산 결과 (PRD §6.4 trend). 기간 토글과 무관하다 — MA20/60 고정 */
+/**
+ * 추세 계산 결과 (PRD §6.4 trend).
+ *
+ * `maShort`·`maLong`·`alignment`·`gapRatio`·`cross` 는 기간 토글과 무관하다 —
+ * MA20/60 비교 자체는 항상 고정이다. 반면 `maSeries` 는 §5.4-a 미니 차트가
+ * **몇 거래일을 그릴지**를 정하므로 토글을 따라간다 — 그래서 기간별로 갈라
+ * 담는다. positions·explanations 와 같은 이유다: 세 기간을 한 응답에 다
+ * 담아야 토글이 네트워크 0회·순수 렌더로 끝난다 (계약 확장 E-01).
+ */
 export interface TrendBlock {
   available: boolean;
   reason?: "INSUFFICIENT_DATA" | "HALTED";
@@ -89,8 +97,8 @@ export interface TrendBlock {
   /** (maShort - maLong) / maLong */
   gapRatio: number | null;
   cross: CrossInfo | null;
-  /** 화면 3 미니 차트용 최근 60일 (§5.4-a) */
-  maSeries: { date: string; short: number; long: number }[];
+  /** 화면 3 미니 차트용 시계열. 선택한 기간(60/120/250거래일)만큼 (§5.4-a) */
+  maSeries: Record<PeriodDays, { date: string; short: number; long: number }[]>;
 }
 
 export interface StockWarning {

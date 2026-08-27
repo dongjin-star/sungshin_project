@@ -9,6 +9,15 @@
  *     지표 이름에 가치판단을 담는 것은 일관되지 않는다.
  *   · **MA 원값은 기본 접힘.** 71,240원이라는 숫자는 초보자에게 의미가 없다.
  *   · 교차가 없으면 배지 영역을 **숨긴다** (빈 카드 금지).
+ *
+ * ── 기간 토글이 미니 차트에도 적용된다 ─────────────────────────────
+ *
+ * 정배열/역배열·이격률·교차는 기간과 무관하게 항상 MA20 vs MA60 하나의
+ * 사실이다. 하지만 §5.4-a 미니 차트가 "몇 거래일을 보여줄지"는 별개의
+ * 질문이다 — 같은 두 선의 관계를 60일 창으로 보면 최근 교차 하나만
+ * 보이고, 250일 창으로 보면 그 교차가 긴 추세 속 어디에 있었는지가
+ * 보인다. 화면 2 와 같은 `PeriodToggle` 을 여기서도 그대로 재사용해
+ * 이 둘을 같은 조작 하나로 넘나들 수 있게 한다.
  */
 
 "use client";
@@ -17,8 +26,9 @@ import { useState } from "react";
 
 import { InfoButton, InfoRow, InfoSheet } from "./InfoSheet";
 import { MaChart, MaLegend } from "./MaChart";
+import { PeriodToggle } from "./PeriodToggle";
 import { formatDateKo, formatGapRatio, formatPrice } from "@/lib/format";
-import type { Currency, TrendBlock } from "@/lib/types";
+import type { Currency, PeriodDays, TrendBlock } from "@/lib/types";
 import type { ExplanationSet } from "@/lib/templates";
 
 interface Props {
@@ -26,9 +36,18 @@ interface Props {
   explanation: ExplanationSet;
   currency: Currency;
   haltedLabel: string | null;
+  period: PeriodDays;
+  onPeriodChange: (period: PeriodDays) => void;
 }
 
-export function TrendTab({ trend, explanation, currency, haltedLabel }: Props) {
+export function TrendTab({
+  trend,
+  explanation,
+  currency,
+  haltedLabel,
+  period,
+  onPeriodChange,
+}: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
 
@@ -55,9 +74,12 @@ export function TrendTab({ trend, explanation, currency, haltedLabel }: Props) {
   }
 
   const aligned = trend.alignment === "UP";
+  const series = trend.maSeries[period];
 
   return (
     <div style={{ padding: "0 1rem" }}>
+      <PeriodToggle value={period} onChange={onPeriodChange} />
+
       {/* ① 배열 상태 — 항상 값이 존재한다 (F-TREND-02) */}
       <div style={{ textAlign: "center", padding: "0.5rem 0 1rem" }}>
         <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
@@ -106,11 +128,21 @@ export function TrendTab({ trend, explanation, currency, haltedLabel }: Props) {
         </div>
       )}
 
-      {/* ③ 두 선의 상대 위치 (§5.4-a) */}
+      {/* ③ 두 선의 상대 위치 (§5.4-a) — 창 길이가 기간 토글을 따라간다 */}
       <div style={{ padding: "0.875rem", background: "var(--surface)", borderRadius: 10 }}>
-        <MaChart series={trend.maSeries} cross={trend.cross} />
-        <div style={{ marginTop: "0.625rem" }}>
+        <MaChart series={series} cross={trend.cross} />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: "0.625rem",
+          }}
+        >
           <MaLegend />
+          <span style={{ fontSize: "0.6875rem", color: "var(--text-subtle)" }}>
+            최근 {period}거래일
+          </span>
         </div>
       </div>
 
@@ -221,6 +253,10 @@ export function TrendTab({ trend, explanation, currency, haltedLabel }: Props) {
         <InfoRow label="차트에 눈금이 없는 이유">
           전달하려는 것이 가격의 절대 수준이 아니라 두 선의 상하 관계와 교차 지점이기 때문입니다.
           두 선은 같은 축으로 그려 상하 관계가 사실과 어긋나지 않게 했습니다.
+        </InfoRow>
+        <InfoRow label="기간 토글은 여기서 무엇을 바꾸는가">
+          20일·60일이라는 비교 대상 자체는 바뀌지 않습니다. 바뀌는 건 차트가 보여주는
+          창의 길이입니다 — 같은 두 선의 관계를 최근 {period}거래일 동안 훑어보는 것입니다.
         </InfoRow>
         <InfoRow label="한계">
           이동평균은 지나간 가격을 평균한 값이라 항상 뒤늦게 움직입니다. 앞으로의 가격을 말해주지

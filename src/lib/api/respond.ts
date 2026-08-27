@@ -9,7 +9,8 @@
 import { NextResponse } from "next/server";
 
 import { TossApiError, logLine, toLogFields } from "../toss/errors";
-import type { ApiErrorResponse, ClientErrorCode } from "../types";
+import { DEFAULT_PERIOD, PERIOD_OPTIONS } from "../types";
+import type { ApiErrorResponse, ClientErrorCode, PeriodDays } from "../types";
 
 const STATUS_OF: Record<ClientErrorCode, number> = {
   NOT_FOUND: 404,
@@ -54,9 +55,9 @@ export function isValidSymbolFormat(symbol: string): boolean {
   return SYMBOL_PATTERN.test(symbol);
 }
 
-/** §4.1 F-POS-04 — 허용된 기간만 통과시킨다 */
-export function parsePeriod(raw: string | null): 60 | 120 | 250 | null {
-  if (raw === null) return 120;
+/** §4.1 F-POS-04 — 허용된 기간(단기 20 / 중기 60 / 장기 120)만 통과시킨다 */
+export function parsePeriod(raw: string | null): PeriodDays | null {
+  if (raw === null) return DEFAULT_PERIOD;
   const n = Number(raw);
-  return n === 60 || n === 120 || n === 250 ? n : null;
+  return (PERIOD_OPTIONS as readonly number[]).includes(n) ? (n as PeriodDays) : null;
 }

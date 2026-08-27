@@ -332,39 +332,46 @@ describe("§7.5 교차 판정", () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe("§7.7 자동 강등", () => {
-  it("250 요청 · 160봉 미만이면 120 으로 강등한다", () => {
-    const r = resolvePeriod(250, 100);
-    expect(r.period).toBe(120);
+  it("장기(120) 요청 · 80봉 미만이면 중기(60) 로 강등한다", () => {
+    const r = resolvePeriod(120, 50);
+    expect(r.period).toBe(60);
     expect(r.downgraded).toBe(true);
     expect(r.unavailable).toBe(false);
   });
 
-  it("120 요청 · 80봉 미만이면 60 으로 강등한다", () => {
-    const r = resolvePeriod(120, 50);
-    expect(r.period).toBe(60);
+  it("중기(60) 요청 · 40봉 미만이면 단기(20) 로 강등한다", () => {
+    const r = resolvePeriod(60, 25);
+    expect(r.period).toBe(20);
     expect(r.downgraded).toBe(true);
   });
 
-  it("60 요청 · 40봉 미만이면 계산 불가다", () => {
-    const r = resolvePeriod(60, 39);
+  it("단기(20) 요청 · 14봉 미만이면 계산 불가다", () => {
+    const r = resolvePeriod(20, 13);
     expect(r.unavailable).toBe(true);
   });
 
   it("봉이 충분하면 강등하지 않는다", () => {
-    const r = resolvePeriod(250, 250);
-    expect(r.period).toBe(250);
+    const r = resolvePeriod(120, 120);
+    expect(r.period).toBe(120);
     expect(r.downgraded).toBe(false);
   });
 
-  it("요청보다 긴 기간으로 올리지는 않는다 — 사용자가 60을 골랐으면 60이다", () => {
-    const r = resolvePeriod(60, 250);
-    expect(r.period).toBe(60);
+  it("요청보다 긴 기간으로 올리지는 않는다 — 사용자가 단기를 골랐으면 단기다", () => {
+    const r = resolvePeriod(20, 120);
+    expect(r.period).toBe(20);
     expect(r.downgraded).toBe(false);
   });
 
-  it("추세는 MA60+1 봉이 있어야 계산된다", () => {
-    expect(canComputeTrend(60)).toBe(false);
-    expect(canComputeTrend(61)).toBe(true);
+  it("각 티어는 그 티어의 장기 MA+1 봉이 있어야 추세를 계산한다", () => {
+    // 단기(MA5 vs MA20): MA20 이 기준
+    expect(canComputeTrend(20, 20)).toBe(false);
+    expect(canComputeTrend(21, 20)).toBe(true);
+    // 중기(MA20 vs MA60): MA60 이 기준
+    expect(canComputeTrend(60, 60)).toBe(false);
+    expect(canComputeTrend(61, 60)).toBe(true);
+    // 장기(MA60 vs MA120): MA120 이 기준
+    expect(canComputeTrend(120, 120)).toBe(false);
+    expect(canComputeTrend(121, 120)).toBe(true);
   });
 });
 
@@ -394,12 +401,12 @@ describe("analyzePosition", () => {
   });
 
   it("봉이 모자라면 강등하고 그 사실을 표시한다 (PP-03)", () => {
-    const candles = candlesSeq(Array<number>(101).fill(100)); // 당일 제외 100봉
-    const pos = analyzePosition({ candles, current: 100, isRealtime: false, halted: false }, 250);
+    const candles = candlesSeq(Array<number>(51).fill(100)); // 당일 제외 50봉
+    const pos = analyzePosition({ candles, current: 100, isRealtime: false, halted: false }, 120);
 
     expect(pos.available).toBe(true);
-    expect(pos.periodDays).toBe(120);
-    expect(pos.requestedPeriodDays).toBe(250);
+    expect(pos.periodDays).toBe(60);
+    expect(pos.requestedPeriodDays).toBe(120);
     expect(pos.downgraded).toBe(true); // 조용히 바꾸지 않는다
   });
 
@@ -426,26 +433,30 @@ describe("analyzePosition", () => {
 });
 
 describe("analyzeTrend", () => {
-  it("61봉 미만이면 INSUFFICIENT_DATA 다", () => {
-    const trend = analyzeTrend({
-      candles: candlesSeq(Array<number>(60).fill(100)),
-      current: 100,
-      isRealtime: false,
-      halted: false,
-    });
+  it("중기(MA20 vs MA60): 61봉 미만이면 INSUFFICIENT_DATA 다", () => {
+    const trend = analyzeTrend(
+      {
+        candles: candlesSeq(Array<number>(60).fill(100)),
+        current: 100,
+        isRealtime: false,
+        halted: false,
+      },
+      60,
+    );
     expect(trend.available).toBe(false);
     expect(trend.reason).toBe("INSUFFICIENT_DATA");
+    // 계산 불가여도 이 블록이 어느 쌍을 다루는지는 항상 알 수 있다
+    expect(trend.maShortPeriod).toBe(20);
+    expect(trend.maLongPeriod).toBe(60);
   });
 
   it("배열 상태는 available 이면 항상 값이 있다 (F-TREND-02)", () => {
     // 우상향 추세 → 정배열
     const rising = Array.from({ length: 100 }, (_, i) => 100 + i);
-    const trend = analyzeTrend({
-      candles: candlesSeq(rising),
-      current: 199,
-      isRealtime: false,
-      halted: false,
-    });
+    const trend = analyzeTrend(
+      { candles: candlesSeq(rising), current: 199, isRealtime: false, halted: false },
+      60,
+    );
     expect(trend.available).toBe(true);
     expect(trend.alignment).toBe("UP");
     expect(trend.maShort).not.toBeNull();
@@ -454,67 +465,76 @@ describe("analyzeTrend", () => {
 
   it("우하향이면 역배열이다", () => {
     const falling = Array.from({ length: 100 }, (_, i) => 200 - i);
-    const trend = analyzeTrend({
-      candles: candlesSeq(falling),
-      current: 101,
-      isRealtime: false,
-      halted: false,
-    });
+    const trend = analyzeTrend(
+      { candles: candlesSeq(falling), current: 101, isRealtime: false, halted: false },
+      60,
+    );
     expect(trend.alignment).toBe("DOWN");
     expect(trend.gapRatio).toBeLessThan(0);
   });
 
-  it("미니 차트 시계열은 기간별로 갈라 담긴다 — 각자 그 기간을 넘지 않는다 (§5.4-a)", () => {
+  it.each([
+    { tier: 20 as const, short: 5, long: 20 },
+    { tier: 60 as const, short: 20, long: 60 },
+    { tier: 120 as const, short: 60, long: 120 },
+  ])("$tier(단기/중기/장기): MA$short vs MA$long 을 비교한다", ({ tier, short, long }) => {
+    const rising = Array.from({ length: 300 }, (_, i) => 100 + i);
+    const closes = candlesSeq(rising).map((c) => c.close);
+    const trend = analyzeTrend(
+      { candles: candlesSeq(rising), current: 100 + 299, isRealtime: false, halted: false },
+      tier,
+    );
+
+    expect(trend.available).toBe(true);
+    expect(trend.maShortPeriod).toBe(short);
+    expect(trend.maLongPeriod).toBe(long);
+
+    // 손계산: 마지막 short/long 개 종가의 평균
+    const handShort = closes.slice(-short).reduce((a, b) => a + b, 0) / short;
+    const handLong = closes.slice(-long).reduce((a, b) => a + b, 0) / long;
+    expect(trend.maShort!).toBeCloseTo(handShort, 6);
+    expect(trend.maLong!).toBeCloseTo(handLong, 6);
+  });
+
+  it("미니 차트 창 길이는 그 티어의 장기 MA 기간을 넘지 않는다 (§5.4-a)", () => {
     const rising = Array.from({ length: 400 }, (_, i) => 100 + i);
-    const trend = analyzeTrend({
-      candles: candlesSeq(rising),
-      current: 499,
-      isRealtime: false,
-      halted: false,
-    });
-    for (const period of [60, 120, 250] as const) {
-      expect(trend.maSeries[period].length).toBeLessThanOrEqual(period);
-      expect(trend.maSeries[period].length).toBeGreaterThan(0);
+    const input = { candles: candlesSeq(rising), current: 499, isRealtime: false, halted: false };
+
+    for (const { tier, long } of [
+      { tier: 20 as const, long: 20 },
+      { tier: 60 as const, long: 60 },
+      { tier: 120 as const, long: 120 },
+    ]) {
+      const trend = analyzeTrend(input, tier);
+      expect(trend.maSeries.length).toBeLessThanOrEqual(long);
+      expect(trend.maSeries.length).toBeGreaterThan(0);
+      // 창의 마지막 원소는 오늘의 maShort/maLong 과 일치해야 한다
+      expect(trend.maSeries.at(-1)!.short).toBeCloseTo(trend.maShort!, 6);
+      expect(trend.maSeries.at(-1)!.long).toBeCloseTo(trend.maLong!, 6);
     }
   });
 
-  it("기간 토글이 실제로 창 길이를 바꾼다 — MA20/60 비교 대상 자체는 그대로다", () => {
-    // 흐름 탭의 기간 토글이 하는 일은 이것 하나다: 같은 MA20 vs MA60 관계를
-    // 더 긴/짧은 창으로 보여준다. 세 시리즈가 전부 같은 마지막 값(오늘의
-    // MA20·MA60)으로 끝나야 하고, 창 길이만 늘어나야 한다.
+  it("장기로 갈수록 창이 넓어진다 — 같은 데이터, 다른 티어", () => {
     const rising = Array.from({ length: 400 }, (_, i) => 100 + i);
-    const trend = analyzeTrend({
-      candles: candlesSeq(rising),
-      current: 499,
-      isRealtime: false,
-      halted: false,
-    });
+    const input = { candles: candlesSeq(rising), current: 499, isRealtime: false, halted: false };
 
-    const s60 = trend.maSeries[60];
-    const s120 = trend.maSeries[120];
-    const s250 = trend.maSeries[250];
+    const short = analyzeTrend(input, 20);
+    const mid = analyzeTrend(input, 60);
+    const long = analyzeTrend(input, 120);
 
-    expect(s60.length).toBeLessThan(s120.length);
-    expect(s120.length).toBeLessThan(s250.length);
-
-    // 같은 종목의 "오늘" 데이터이므로 마지막 값은 세 창 모두 동일하다
-    expect(s60.at(-1)).toEqual(s120.at(-1));
-    expect(s120.at(-1)).toEqual(s250.at(-1));
+    expect(short.maSeries.length).toBeLessThan(mid.maSeries.length);
+    expect(mid.maSeries.length).toBeLessThan(long.maSeries.length);
   });
 
   it("보유 봉이 요청 기간보다 적으면 있는 만큼만 담는다", () => {
-    // 150봉만 있는 종목: 60일 창은 요청한 만큼 꽉 채울 수 있지만, 250일
-    // 창은 애초에 그만한 데이터가 없다 — 잘라내기가 아니라 있는 만큼만
-    // 정직하게 담아야 한다 (PP-03 과 같은 정신).
+    // 150봉만 있는 종목: 중기(창 60) 는 요청한 만큼 꽉 채울 수 있지만,
+    // 장기(창 120) 는 애초에 그만한 데이터가 없다 — 잘라내기가 아니라
+    // 있는 만큼만 정직하게 담아야 한다 (PP-03 과 같은 정신).
     const rising = Array.from({ length: 150 }, (_, i) => 100 + i);
-    const trend = analyzeTrend({
-      candles: candlesSeq(rising),
-      current: 249,
-      isRealtime: false,
-      halted: false,
-    });
-    expect(trend.maSeries[60].length).toBe(60);
-    expect(trend.maSeries[250].length).toBeLessThan(250);
+    const input = { candles: candlesSeq(rising), current: 249, isRealtime: false, halted: false };
+
+    expect(analyzeTrend(input, 60).maSeries.length).toBe(60);
+    expect(analyzeTrend(input, 120).maSeries.length).toBeLessThan(120);
   });
 });
 
@@ -528,7 +548,7 @@ describe("§7.6 설명 문구", () => {
 
   it("위치 문장과 추세 문장이 분리된 배열로 나온다 (R-01 구조적 강제)", () => {
     const pos = analyzePosition(input, 120);
-    const trend = analyzeTrend(input);
+    const trend = analyzeTrend(input, 60);
     const ex = buildExplanations(pos, trend, "KRW");
 
     expect(Array.isArray(ex.position)).toBe(true);
@@ -539,7 +559,7 @@ describe("§7.6 설명 문구", () => {
 
   it("총 4문장을 넘지 않는다 (R-03)", () => {
     const pos = analyzePosition(input, 120);
-    const trend = analyzeTrend(input);
+    const trend = analyzeTrend(input, 60);
     const ex = buildExplanations(pos, trend, "KRW");
 
     expect(ex.position.length + ex.trend.length).toBeLessThanOrEqual(MAX_SENTENCES);
@@ -547,7 +567,7 @@ describe("§7.6 설명 문구", () => {
 
   it("잘라내도 필수 문장은 남는다", () => {
     const pos = analyzePosition(input, 120);
-    const trend = analyzeTrend(input);
+    const trend = analyzeTrend(input, 60);
     const ex = buildExplanations(pos, trend, "KRW");
 
     expect(ex.position[0]).toMatch(/최근 \d+거래일 중 약 \d+%의 날보다 높습니다\./);
@@ -566,7 +586,11 @@ describe("§7.6 설명 문구", () => {
       { candles: c, current: 74_500, isRealtime: false, halted: false },
       120,
     );
-    const ex = buildExplanations(pos, analyzeTrend({ candles: c, current: 74_500, isRealtime: false, halted: false }), "KRW");
+    const ex = buildExplanations(
+      pos,
+      analyzeTrend({ candles: c, current: 74_500, isRealtime: false, halted: false }, 60),
+      "KRW",
+    );
 
     expect(ex.position[0]).toBe("최근 120거래일 중 약 33%의 날보다 높습니다.");
   });
@@ -574,7 +598,7 @@ describe("§7.6 설명 문구", () => {
   it("거래정지면 그 사실만 말한다", () => {
     const halted = { candles, current: 299, isRealtime: false, halted: true } as const;
     const pos = analyzePosition(halted, 120);
-    const ex = buildExplanations(pos, analyzeTrend(halted), "KRW");
+    const ex = buildExplanations(pos, analyzeTrend(halted, 60), "KRW");
 
     expect(ex.position).toEqual(["거래가 정지된 종목입니다."]);
     expect(ex.trend).toEqual([]); // 중복 안내하지 않는다
@@ -582,7 +606,7 @@ describe("§7.6 설명 문구", () => {
 
   it("US 종목은 달러로 포맷한다 (R-04)", () => {
     const pos = analyzePosition(input, 120);
-    const ex = buildExplanations(pos, analyzeTrend(input), "USD");
+    const ex = buildExplanations(pos, analyzeTrend(input, 60), "USD");
     const highLow = ex.position.find((s) => s.includes("최고가"));
     if (highLow !== undefined) expect(highLow).toContain("$");
   });
@@ -603,7 +627,7 @@ describe("PP-05 종합 판정 금지", () => {
         const c = candlesSeq(closes);
         const current = closes[offset]!;
         const inp = { candles: c, current, isRealtime: false, halted: false } as const;
-        const ex = buildExplanations(analyzePosition(inp, 120), analyzeTrend(inp), "KRW");
+        const ex = buildExplanations(analyzePosition(inp, 120), analyzeTrend(inp, 60), "KRW");
 
         for (const sentence of [...ex.position, ...ex.trend]) {
           for (const conj of 접속사) {

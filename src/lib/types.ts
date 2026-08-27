@@ -19,10 +19,43 @@ export const BODY_ZONES: readonly BodyZone[] = [
   "HEAD",
 ] as const;
 
-/** PRD §4.1 F-POS-04 — 기간 토글. 기본값 120 */
-export type PeriodDays = 60 | 120 | 250;
-export const PERIOD_OPTIONS: readonly PeriodDays[] = [60, 120, 250] as const;
-export const DEFAULT_PERIOD: PeriodDays = 120;
+/**
+ * PRD §4.1 F-POS-04 — 기간 토글.
+ *
+ * 2026-08-28 단기/중기/장기로 개편했다(기존 60/120/250거래일 창 방식에서).
+ * 위치(퍼센타일 분포 창)와 흐름(이동평균 비교 쌍)이 **같은 세 숫자를 공유한다**
+ * — 화면 2·3 모두 이 토글 하나로 움직이고, 두 화면에서 서로 다른 숫자 체계를
+ * 따로 외울 필요가 없다.
+ *
+ *   단기(20)  위치: 최근 20거래일 분포     흐름: MA5  vs MA20
+ *   중기(60)  위치: 최근 60거래일 분포     흐름: MA20 vs MA60
+ *   장기(120) 위치: 최근 120거래일 분포    흐름: MA60 vs MA120
+ *
+ * 세 티어 모두 "분포/차트 창 길이 = 그 티어의 장기 이동평균 기간"이라는 규칙이
+ * 성립한다 — 숫자를 하나 더 늘리지 않고 재사용한 이유다.
+ */
+export type PeriodDays = 20 | 60 | 120;
+export const PERIOD_OPTIONS: readonly PeriodDays[] = [20, 60, 120] as const;
+export const DEFAULT_PERIOD: PeriodDays = 60;
+
+/** 토글 표시 라벨. 화면에는 거래일 수가 아니라 이 이름이 보인다 */
+export const PERIOD_LABEL: Record<PeriodDays, string> = {
+  20: "단기",
+  60: "중기",
+  120: "장기",
+};
+
+/** 각 기간에서 비교하는 이동평균 쌍 */
+export interface MaPair {
+  short: number;
+  long: number;
+}
+
+export const MA_PAIR_OF: Record<PeriodDays, MaPair> = {
+  20: { short: 5, long: 20 },
+  60: { short: 20, long: 60 },
+  120: { short: 60, long: 120 },
+};
 
 export type Market = "KR" | "US";
 export type Currency = "KRW" | "USD";
@@ -79,17 +112,26 @@ export interface CrossInfo {
 }
 
 /**
- * 추세 계산 결과 (PRD §6.4 trend).
+ * 추세 계산 결과 (PRD §6.4 trend). **기간(티어)마다 하나씩** 나온다.
  *
- * `maShort`·`maLong`·`alignment`·`gapRatio`·`cross` 는 기간 토글과 무관하다 —
- * MA20/60 비교 자체는 항상 고정이다. 반면 `maSeries` 는 §5.4-a 미니 차트가
- * **몇 거래일을 그릴지**를 정하므로 토글을 따라간다 — 그래서 기간별로 갈라
- * 담는다. positions·explanations 와 같은 이유다: 세 기간을 한 응답에 다
- * 담아야 토글이 네트워크 0회·순수 렌더로 끝난다 (계약 확장 E-01).
+ * 2026-08-28 개편: 이제 기간 토글이 비교 대상 MA 쌍 자체를 바꾼다
+ * (`MA_PAIR_OF`, 위 `PeriodDays` 주석 참고) — 단기는 MA5 vs MA20, 중기는
+ * MA20 vs MA60, 장기는 MA60 vs MA120. 그래서 `TrendBlock` 하나가 "그 티어
+ * 하나의 흐름"을 완전히 나타내고, `StockAnalysisResponse.trend` 가 세 티어를
+ * `Record` 로 담는다 — `positions`·`explanations` 와 같은 이유다: 세 티어를
+ * 한 응답에 다 담아야 토글이 네트워크 0회·순수 렌더로 끝난다 (계약 확장 E-01).
+ *
+ * `maShortPeriod`/`maLongPeriod` 를 값으로 들고 다니는 이유: 화면이 "20일
+ * 평균"·"MA5" 같은 라벨을 하드코딩하지 않고 이 값으로 조립하게 하기 위해서다
+ * — 티어마다 실제 숫자가 다르므로 문구를 고정하면 셋 중 둘은 거짓말이 된다.
  */
 export interface TrendBlock {
   available: boolean;
   reason?: "INSUFFICIENT_DATA" | "HALTED";
+  /** 이 블록이 비교하는 짧은 쪽 MA 기간 (5, 20, 60 중 하나) */
+  maShortPeriod: number;
+  /** 이 블록이 비교하는 긴 쪽 MA 기간 (20, 60, 120 중 하나) */
+  maLongPeriod: number;
   maShort: number | null;
   maLong: number | null;
   /** 정배열(UP) / 역배열(DOWN). available 이면 항상 값이 있다 (F-TREND-02) */
@@ -97,8 +139,8 @@ export interface TrendBlock {
   /** (maShort - maLong) / maLong */
   gapRatio: number | null;
   cross: CrossInfo | null;
-  /** 화면 3 미니 차트용 시계열. 선택한 기간(60/120/250거래일)만큼 (§5.4-a) */
-  maSeries: Record<PeriodDays, { date: string; short: number; long: number }[]>;
+  /** 화면 3 미니 차트용 시계열. 창 길이 = maLongPeriod (§5.4-a) */
+  maSeries: { date: string; short: number; long: number }[];
 }
 
 export interface StockWarning {
@@ -121,10 +163,10 @@ export interface PriceBlock {
 }
 
 /**
- * GET /api/stock/{symbol}?period=120
+ * GET /api/stock/{symbol}?period=60
  *
  * ⚠️ 계약 확장 E-01: PRD §6.4 의 `position` 단일 객체 대신 세 기간을 모두 담는다.
- *    250봉 하나로 60/120/250 이 전부 계산되므로(§8.2), 한 응답에 담으면
+ *    250봉 하나로 단기/중기/장기가 전부 계산되므로(§8.2), 한 응답에 담으면
  *    기간 토글이 네트워크 0회 · 순수 렌더가 된다.
  *    §14.2 의 "기간 토글 반영 < 100ms" 목표는 이 방식이라야 달성 가능하다.
  */
@@ -138,7 +180,8 @@ export interface StockAnalysisResponse {
   selectedPeriod: PeriodDays;
   /** 세 기간 전부 (E-01) */
   positions: Record<PeriodDays, PositionBlock>;
-  trend: TrendBlock;
+  /** 세 기간 전부 — 기간마다 비교하는 MA 쌍 자체가 다르다 (E-01과 같은 이유) */
+  trend: Record<PeriodDays, TrendBlock>;
   warnings: StockWarning[];
   /**
    * 기간별 템플릿 문장 (§7.6). 토글해도 문장이 즉시 바뀌어야 하므로 기간별로 담는다.

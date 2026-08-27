@@ -36,7 +36,7 @@ import {
   useCountTween,
   usePrefersReducedMotion,
 } from "@/lib/ui/motion";
-import { BODY_ZONES, type BodyZone, type PeriodDays } from "@/lib/types";
+import { BODY_ZONES, PERIOD_LABEL, type BodyZone, type PeriodDays } from "@/lib/types";
 
 const POSE_SRC: Record<BodyZone, string> = {
   FOOT: "/poses/foot.webp",
@@ -108,7 +108,7 @@ export function StockPositionCard({ periodDays, percentile, zone }: Props) {
           color: "var(--text-subtle)",
         }}
       >
-        최근 {periodDays}거래일 기준
+        {PERIOD_LABEL[periodDays]} · 최근 {periodDays}거래일 기준
       </p>
     </div>
   );

@@ -5,21 +5,22 @@
  * 현재가뿐이고, 출력은 §6.4 계약의 position/trend 블록이다.
  * 덕분에 손계산한 값과 대조하는 단위 테스트가 그대로 성립한다.
  *
- * 핵심: 250봉 하나로 60·120·250 세 기간의 퍼센타일과 MA20/60·교차가
+ * 핵심: 250봉 하나로 단기·중기·장기 세 티어의 퍼센타일과 MA 쌍·교차가
  * 전부 계산된다 (§8.2). 그래서 기간 토글에 API 호출이 0회다.
  */
 
 import type {
   BodyZone,
   Candle,
+  MaPair,
   PeriodDays,
   PositionBlock,
   TrendBlock,
 } from "../types";
-import { PERIOD_OPTIONS } from "../types";
+import { MA_PAIR_OF, PERIOD_OPTIONS } from "../types";
 import { isFlat, midrankPercentile } from "./percentile";
 import { zoneOf } from "./zone";
-import { MA_LONG, MA_SHORT, gapRatio, sma, withLiveClose } from "./ma";
+import { gapRatio, sma, withLiveClose } from "./ma";
 import { detectCross } from "./cross";
 import { canComputeTrend, resolvePeriod } from "./requirements";
 
@@ -97,34 +98,33 @@ export function analyzePosition(
 }
 
 /**
- * 추세 계산.
+ * 한 티어의 추세 계산.
  *
- * maShort/maLong/alignment/cross 는 기간 토글과 무관하다 — MA20/60 비교
- * 자체는 고정이다. `maSeries` 만 기간별로 갈라 담는다 (§5.4-a, `TrendBlock`
- * 주석 참고) — 세 기간을 한 번에 계산해 토글을 네트워크 0회로 만든다.
+ * 어떤 MA 쌍을 비교할지는 `tier` 하나로 정해진다 (`MA_PAIR_OF`) — 단기는
+ * MA5 vs MA20, 중기는 MA20 vs MA60, 장기는 MA60 vs MA120. 미니 차트의 창
+ * 길이는 그 티어의 장기 MA 기간과 같다 — 그래서 "20일 SMA를 20일 창에
+ * 채운다"가 아니라 "그 관계가 실제로 성립하기 시작하는 지점부터 오늘까지"가
+ * 자연스럽게 창이 된다.
  */
-export function analyzeTrend(input: AnalyzeInput): TrendBlock {
+export function analyzeTrend(input: AnalyzeInput, tier: PeriodDays): TrendBlock {
   const { candles, current, isRealtime, halted } = input;
-
-  const emptyMaSeries = (): TrendBlock["maSeries"] => {
-    const out = {} as TrendBlock["maSeries"];
-    for (const period of PERIOD_OPTIONS) out[period] = [];
-    return out;
-  };
+  const { short: shortN, long: longN }: MaPair = MA_PAIR_OF[tier];
 
   const unavailable = (reason: "INSUFFICIENT_DATA" | "HALTED"): TrendBlock => ({
     available: false,
     reason,
+    maShortPeriod: shortN,
+    maLongPeriod: longN,
     maShort: null,
     maLong: null,
     alignment: null,
     gapRatio: null,
     cross: null,
-    maSeries: emptyMaSeries(),
+    maSeries: [],
   });
 
   if (halted) return unavailable("HALTED");
-  if (!canComputeTrend(candles.length)) return unavailable("INSUFFICIENT_DATA");
+  if (!canComputeTrend(candles.length, tier)) return unavailable("INSUFFICIENT_DATA");
 
   const dates = candles.map((c) => c.date);
   const volumes = candles.map((c) => c.volume);
@@ -134,8 +134,8 @@ export function analyzeTrend(input: AnalyzeInput): TrendBlock {
     isRealtime,
   );
 
-  const shortSeries = sma(closes, MA_SHORT);
-  const longSeries = sma(closes, MA_LONG);
+  const shortSeries = sma(closes, shortN);
+  const longSeries = sma(closes, longN);
 
   const last = closes.length - 1;
   const maShort = shortSeries[last];
@@ -152,23 +152,27 @@ export function analyzeTrend(input: AnalyzeInput): TrendBlock {
 
   const cross = detectCross({ dates, maShort: shortSeries, maLong: longSeries, volumes });
 
-  // 미니 차트용 시계열. 두 MA가 모두 잡히는 구간만 넘긴다. 기간 토글이
-  // 고르는 건 "몇 거래일을 보여줄지"이지, MA20/60 이라는 비교 대상 자체가
-  // 아니다 — 60일 창을 60일 SMA로 채우려는 게 아니라, 같은 MA20 vs MA60
-  // 관계를 더 긴 시야에서 보여주는 것뿐이다.
-  const maSeries = {} as TrendBlock["maSeries"];
-  for (const period of PERIOD_OPTIONS) {
-    const series: TrendBlock["maSeries"][PeriodDays] = [];
-    for (let i = Math.max(0, closes.length - period); i <= last; i += 1) {
-      const s = shortSeries[i];
-      const l = longSeries[i];
-      if (s == null || l == null) continue;
-      series.push({ date: dates[i]!, short: s, long: l });
-    }
-    maSeries[period] = series;
+  // 미니 차트용 시계열. 창 길이 = 이 티어의 장기 MA 기간. 두 MA가 모두
+  // 잡히는 구간만 넘긴다.
+  const maSeries: TrendBlock["maSeries"] = [];
+  for (let i = Math.max(0, closes.length - longN); i <= last; i += 1) {
+    const s = shortSeries[i];
+    const l = longSeries[i];
+    if (s == null || l == null) continue;
+    maSeries.push({ date: dates[i]!, short: s, long: l });
   }
 
-  return { available: true, maShort, maLong, alignment, gapRatio: gap, cross, maSeries };
+  return {
+    available: true,
+    maShortPeriod: shortN,
+    maLongPeriod: longN,
+    maShort,
+    maLong,
+    alignment,
+    gapRatio: gap,
+    cross,
+    maSeries,
+  };
 }
 
 /** 세 기간을 한 번에 계산한다 (계약 확장 E-01) */
@@ -178,6 +182,15 @@ export function analyzeAllPeriods(
   const out = {} as Record<PeriodDays, PositionBlock>;
   for (const period of PERIOD_OPTIONS) {
     out[period] = analyzePosition(input, period);
+  }
+  return out;
+}
+
+/** 세 티어의 추세를 한 번에 계산한다 (계약 확장 E-01과 같은 이유) */
+export function analyzeAllTrends(input: AnalyzeInput): Record<PeriodDays, TrendBlock> {
+  const out = {} as Record<PeriodDays, TrendBlock>;
+  for (const period of PERIOD_OPTIONS) {
+    out[period] = analyzeTrend(input, period);
   }
   return out;
 }

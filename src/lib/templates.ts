@@ -87,21 +87,28 @@ export function buildPositionSentences(
   return out;
 }
 
-/** §7.6-B — 추세 문장 */
+/**
+ * §7.6-B — 추세 문장.
+ *
+ * MA 기간을 하드코딩하지 않는다 — `trend.maShortPeriod`/`maLongPeriod` 로
+ * 조립한다. 단기(5·20일)·중기(20·60일)·장기(60·120일) 세 티어가 이 함수
+ * 하나를 공유하므로, 숫자를 고정하면 셋 중 둘은 틀린 문장이 나간다.
+ */
 export function buildTrendSentences(trend: TrendBlock): string[] {
   const out: string[] = [];
+  const { maShortPeriod: s, maLongPeriod: l } = trend;
 
   if (!trend.available) {
     if (trend.reason === "HALTED") return out; // 위치 문장에서 이미 안내했다
-    out.push("60일 평균을 계산할 만큼의 데이터가 아직 없습니다.");
+    out.push(`${l}일 평균을 계산할 만큼의 데이터가 아직 없습니다.`);
     return out;
   }
 
   // [필수] 배열 상태는 항상 값이 존재한다 (F-TREND-02)
   if (trend.alignment === "UP") {
-    out.push("20일 평균 가격이 60일 평균 가격보다 높습니다.");
+    out.push(`${s}일 평균 가격이 ${l}일 평균 가격보다 높습니다.`);
   } else if (trend.alignment === "DOWN") {
-    out.push("20일 평균 가격이 60일 평균 가격보다 낮습니다.");
+    out.push(`${s}일 평균 가격이 ${l}일 평균 가격보다 낮습니다.`);
   }
 
   // [조건부] 교차
@@ -109,9 +116,11 @@ export function buildTrendSentences(trend: TrendBlock): string[] {
   if (cross !== null) {
     const direction = cross.type === "GOLDEN" ? "위로" : "아래로";
     const when = cross.daysAgo === 0 ? "오늘" : `${cross.daysAgo}거래일 전`;
-    out.push(`${when}, 20일 평균선이 60일 평균선을 ${direction} 지나갔습니다.`);
+    out.push(`${when}, ${s}일 평균선이 ${l}일 평균선을 ${direction} 지나갔습니다.`);
 
     // [조건부] 거래량 미확인. 필터가 아니라 사실 부기다 (§7.5 3단계).
+    // 여기 "20일"은 MA 기간이 아니라 cross.ts 의 거래량 평균 창(VOLUME_AVG_DAYS)
+    // 이다 — 티어와 무관하게 고정이라 그대로 둔다.
     if (!cross.volumeConfirmed) {
       out.push("그날의 거래량은 최근 20일 평균보다 적었습니다.");
     }

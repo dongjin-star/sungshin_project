@@ -13,12 +13,13 @@ import type { Database } from "better-sqlite3";
 
 import { TTL, TtlCache } from "../cache/memory";
 import { getStock, recordAccess, type StockRow } from "../db/repo";
-import { analyzeAllPeriods, analyzeTrend } from "../indicators/analyze";
+import { analyzeAllPeriods, analyzeAllTrends, analyzeTrend } from "../indicators/analyze";
 import { fetchPrices, fetchWarnings } from "../toss/endpoints";
 import { isFormingBar } from "../toss/trading-day";
 import { buildExplanations } from "../templates";
 import {
   DEFAULT_PERIOD,
+  PERIOD_OPTIONS,
   type Candle,
   type Market,
   type PeriodDays,
@@ -197,11 +198,11 @@ export async function analyzeStock(
   const input = { candles, current, isRealtime: state === "OPEN", halted };
 
   const positions = analyzeAllPeriods(input);
-  const trend = analyzeTrend(input);
+  const trend = analyzeAllTrends(input);
 
   const explanations = {} as StockAnalysisResponse["explanations"];
-  for (const period of [60, 120, 250] as PeriodDays[]) {
-    explanations[period] = buildExplanations(positions[period], trend, currency);
+  for (const period of PERIOD_OPTIONS) {
+    explanations[period] = buildExplanations(positions[period], trend[period], currency);
   }
 
   if (db !== null) recordAccess(db, symbol, new Date().toISOString());
@@ -278,7 +279,9 @@ export async function analyzeWatchlist(
 
         const input = { candles, current, isRealtime: state === "OPEN", halted: false };
         const position = analyzeAllPeriods(input)[period];
-        const trend = analyzeTrend(input);
+        // 관심종목은 선택된 티어 하나만 필요하다 — 화면 5는 미니 차트를
+        // 그리지 않으므로 세 티어를 전부 계산할 이유가 없다.
+        const trend = analyzeTrend(input, period);
         const block = priceBlock(current, hit?.asOf ?? "", candles, ctx.market, state);
 
         return {

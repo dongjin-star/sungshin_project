@@ -1,8 +1,10 @@
 /**
- * MA20·MA60 미니 차트 (PRD §5.4-a)
+ * 이동평균 미니 차트 (PRD §5.4-a)
  *
- * 전체 캔들 차트를 그리지 않는다. 최근 60거래일의 두 선만 **축·눈금 없이**
- * 얇게 그린다. 전달 대상은 두 선의 상하 관계와 교차 지점뿐이다.
+ * 전체 캔들 차트를 그리지 않는다. 선택한 기간(단기/중기/장기)의 두 MA 선만
+ * **축·눈금 없이** 얇게 그린다. 전달 대상은 두 선의 상하 관계와 교차
+ * 지점뿐이다. 어느 기간을 비교하는지는(5·20 / 20·60 / 60·120) 고정하지
+ * 않는다 — `shortPeriod`/`longPeriod` 로 받아 라벨을 그때그때 조립한다.
  *
  *   · Y축 눈금·가격 라벨 없음
  *   · 캔들·거래량 없음
@@ -23,9 +25,11 @@ const PAD = 6;
 interface Props {
   series: readonly { date: string; short: number; long: number }[];
   cross: CrossInfo | null;
+  shortPeriod: number;
+  longPeriod: number;
 }
 
-export function MaChart({ series, cross }: Props) {
+export function MaChart({ series, cross, shortPeriod, longPeriod }: Props) {
   if (series.length < 2) return null;
 
   // 두 선을 하나의 범위로 스케일한다 (위 주석 참조)
@@ -54,12 +58,12 @@ export function MaChart({ series, cross }: Props) {
       width="100%"
       height="auto"
       role="img"
-      aria-label="최근 60거래일 20일 평균선과 60일 평균선의 상대 위치"
+      aria-label={`최근 ${series.length}거래일 ${shortPeriod}일 평균선과 ${longPeriod}일 평균선의 상대 위치`}
       style={{ display: "block" }}
     >
-      {/* MA60 — 얇은 선 */}
+      {/* 장기 쪽 — 얇은 선 */}
       <path d={path("long")} fill="none" stroke="var(--ma-long)" strokeWidth="1.25" />
-      {/* MA20 — 굵은 선 */}
+      {/* 단기 쪽 — 굵은 선 */}
       <path
         d={path("short")}
         fill="none"
@@ -86,17 +90,17 @@ export function MaChart({ series, cross }: Props) {
   );
 }
 
-/** 범례. 선 굵기만으로는 어느 쪽이 20일인지 알 수 없다 */
-export function MaLegend() {
+/** 범례. 선 굵기만으로는 어느 쪽이 몇 일 평균인지 알 수 없다 */
+export function MaLegend({ shortPeriod, longPeriod }: { shortPeriod: number; longPeriod: number }) {
   return (
     <div style={{ display: "flex", gap: "1rem", fontSize: "0.6875rem", color: "var(--text-subtle)" }}>
       <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
         <span style={{ width: 14, height: 2.5, borderRadius: 2, background: "var(--ma-short)" }} />
-        20일 평균
+        {shortPeriod}일 평균
       </span>
       <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
         <span style={{ width: 14, height: 1.5, borderRadius: 2, background: "var(--ma-long)" }} />
-        60일 평균
+        {longPeriod}일 평균
       </span>
     </div>
   );

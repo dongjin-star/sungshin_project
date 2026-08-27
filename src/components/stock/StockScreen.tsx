@@ -137,6 +137,7 @@ export function StockScreen({ symbol }: { symbol: string }) {
   const haltedLabel = blocking?.label ?? null;
 
   const position = data.positions[period];
+  const trend = data.trend[period];
   const explanation = data.explanations[period];
 
   return (
@@ -214,7 +215,7 @@ export function StockScreen({ symbol }: { symbol: string }) {
 
       {tab === "trend" && (
         <TrendTab
-          trend={data.trend}
+          trend={trend}
           explanation={explanation}
           currency={data.currency}
           haltedLabel={haltedLabel}
@@ -228,7 +229,7 @@ export function StockScreen({ symbol }: { symbol: string }) {
           explanation={explanation}
           period={position.periodDays}
           hasPosition={haltedLabel === null && position.available}
-          hasTrend={haltedLabel === null && data.trend.available}
+          hasTrend={haltedLabel === null && trend.available}
         />
       )}
 

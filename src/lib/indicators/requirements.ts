@@ -5,20 +5,22 @@
  * 그래서 강등은 반드시 `downgraded: true` 로 표시되어 화면에 사유가 뜬다.
  */
 
-import type { PeriodDays } from "../types";
-import { MA_LONG, MA_SHORT } from "./ma";
+import { MA_PAIR_OF, type PeriodDays } from "../types";
 
-/** §7.7 — 퍼센타일 계산에 필요한 최소 봉 수 */
+/** §7.7 — 퍼센타일 계산에 필요한 최소 봉 수. 요청 기간의 약 2/3 이다 */
 export const MIN_CANDLES_FOR_PERIOD: Record<PeriodDays, number> = {
+  20: 14,
   60: 40,
   120: 80,
-  250: 160,
 };
 
-/** §7.7 — 추세 계산에 필요한 최소 봉 수. MA60 이 잡혀야 배열 상태가 나온다 */
-export const MIN_CANDLES_FOR_TREND = MA_LONG + 1;
-/** MA20 만으로는 배열 상태를 낼 수 없으므로 참고값 */
-export const MIN_CANDLES_FOR_MA_SHORT = MA_SHORT + 1;
+/**
+ * §7.7 — 이 티어의 추세를 계산하는 데 필요한 최소 봉 수.
+ * 그 티어의 장기 MA 가 잡혀야 배열 상태가 나온다.
+ */
+export function minCandlesForTrend(period: PeriodDays): number {
+  return MA_PAIR_OF[period].long + 1;
+}
 
 export interface PeriodResolution {
   /** 실제로 쓸 기간 */
@@ -34,13 +36,13 @@ export interface PeriodResolution {
 /**
  * 보유 봉 수에 맞춰 기간을 강등한다 (§7.7).
  *
- *   250 → (160봉 미만) → 120 → (80봉 미만) → 60 → (40봉 미만) → 계산 불가
+ *   장기(120) → (80봉 미만) → 중기(60) → (40봉 미만) → 단기(20) → (14봉 미만) → 계산 불가
  *
- * 요청보다 더 긴 기간으로 올리지는 않는다. 사용자가 60을 골랐으면 60이다.
+ * 요청보다 더 긴 기간으로 올리지는 않는다. 사용자가 단기를 골랐으면 단기다.
  */
 export function resolvePeriod(requested: PeriodDays, dataPoints: number): PeriodResolution {
   // 요청 기간 이하의 후보만, 긴 것부터 시도한다
-  const candidates: PeriodDays[] = ([250, 120, 60] as const).filter((p) => p <= requested);
+  const candidates: PeriodDays[] = ([120, 60, 20] as const).filter((p) => p <= requested);
 
   for (const period of candidates) {
     if (dataPoints >= MIN_CANDLES_FOR_PERIOD[period]) {
@@ -56,7 +58,7 @@ export function resolvePeriod(requested: PeriodDays, dataPoints: number): Period
   return { period: requested, requested, downgraded: false, unavailable: true };
 }
 
-/** 추세(배열 상태·교차)를 계산할 수 있는가 */
-export function canComputeTrend(dataPoints: number): boolean {
-  return dataPoints >= MIN_CANDLES_FOR_TREND;
+/** 이 티어의 추세(배열 상태·교차)를 계산할 수 있는가 */
+export function canComputeTrend(dataPoints: number, period: PeriodDays): boolean {
+  return dataPoints >= minCandlesForTrend(period);
 }

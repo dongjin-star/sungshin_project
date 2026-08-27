@@ -10,14 +10,15 @@
  *   · **MA 원값은 기본 접힘.** 71,240원이라는 숫자는 초보자에게 의미가 없다.
  *   · 교차가 없으면 배지 영역을 **숨긴다** (빈 카드 금지).
  *
- * ── 기간 토글이 미니 차트에도 적용된다 ─────────────────────────────
+ * ── 기간 토글이 비교 대상 자체를 바꾼다 (2026-08-28 개편) ─────────
  *
- * 정배열/역배열·이격률·교차는 기간과 무관하게 항상 MA20 vs MA60 하나의
- * 사실이다. 하지만 §5.4-a 미니 차트가 "몇 거래일을 보여줄지"는 별개의
- * 질문이다 — 같은 두 선의 관계를 60일 창으로 보면 최근 교차 하나만
- * 보이고, 250일 창으로 보면 그 교차가 긴 추세 속 어디에 있었는지가
- * 보인다. 화면 2 와 같은 `PeriodToggle` 을 여기서도 그대로 재사용해
- * 이 둘을 같은 조작 하나로 넘나들 수 있게 한다.
+ * 화면 2 와 같은 `PeriodToggle` 을 여기서도 쓰지만, 이번엔 "몇 거래일을
+ * 보여줄지"만 바뀌는 게 아니다 — **어느 MA 쌍을 비교하는지**가 바뀐다.
+ *
+ *   단기  MA5  vs MA20    중기  MA20 vs MA60    장기  MA60 vs MA120
+ *
+ * `trend.maShortPeriod`/`maLongPeriod` 가 그 값을 들고 오므로, 화면은
+ * "20일"·"60일" 같은 숫자를 하드코딩하지 않고 이 값으로 문구를 조립한다.
  */
 
 "use client";
@@ -54,6 +55,7 @@ export function TrendTab({
   if (haltedLabel !== null) {
     return (
       <div style={{ padding: "1rem" }}>
+        <PeriodToggle value={period} onChange={onPeriodChange} />
         <Card
           title={`${haltedLabel} 종목입니다`}
           body="거래가 정상적으로 이루어지지 않는 기간의 가격으로는 흐름을 계산하지 않습니다."
@@ -64,17 +66,20 @@ export function TrendTab({
 
   if (!trend.available || trend.alignment === null) {
     return (
-      <div style={{ padding: "1rem" }}>
-        <Card
-          title="흐름을 계산할 수 없습니다"
-          body="60일 평균선을 그리려면 최소 60거래일치 가격 자료가 필요합니다."
-        />
+      <div style={{ padding: "0 1rem" }}>
+        <PeriodToggle value={period} onChange={onPeriodChange} />
+        <div style={{ marginTop: "1rem" }}>
+          <Card
+            title="흐름을 계산할 수 없습니다"
+            body={`${trend.maLongPeriod}일 평균선을 그리려면 최소 ${trend.maLongPeriod}거래일치 가격 자료가 필요합니다.`}
+          />
+        </div>
       </div>
     );
   }
 
   const aligned = trend.alignment === "UP";
-  const series = trend.maSeries[period];
+  const { maShortPeriod: shortN, maLongPeriod: longN } = trend;
 
   return (
     <div style={{ padding: "0 1rem" }}>
@@ -86,7 +91,7 @@ export function TrendTab({
           {aligned ? "정배열" : "역배열"}
         </div>
         <div style={{ marginTop: "0.25rem", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-          20일 평균이 60일 평균보다 {aligned ? "높습니다" : "낮습니다"}
+          {shortN}일 평균이 {longN}일 평균보다 {aligned ? "높습니다" : "낮습니다"}
         </div>
       </div>
 
@@ -128,9 +133,9 @@ export function TrendTab({
         </div>
       )}
 
-      {/* ③ 두 선의 상대 위치 (§5.4-a) — 창 길이가 기간 토글을 따라간다 */}
+      {/* ③ 두 선의 상대 위치 (§5.4-a) — 쌍도 창 길이도 기간 토글을 따라간다 */}
       <div style={{ padding: "0.875rem", background: "var(--surface)", borderRadius: 10 }}>
-        <MaChart series={series} cross={trend.cross} />
+        <MaChart series={trend.maSeries} cross={trend.cross} shortPeriod={shortN} longPeriod={longN} />
         <div
           style={{
             display: "flex",
@@ -139,9 +144,9 @@ export function TrendTab({
             marginTop: "0.625rem",
           }}
         >
-          <MaLegend />
+          <MaLegend shortPeriod={shortN} longPeriod={longN} />
           <span style={{ fontSize: "0.6875rem", color: "var(--text-subtle)" }}>
-            최근 {period}거래일
+            최근 {longN}거래일
           </span>
         </div>
       </div>
@@ -192,8 +197,8 @@ export function TrendTab({
       {showRaw && trend.maShort !== null && trend.maLong !== null && (
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {[
-            { label: "20일 평균", value: trend.maShort },
-            { label: "60일 평균", value: trend.maLong },
+            { label: `${shortN}일 평균`, value: trend.maShort },
+            { label: `${longN}일 평균`, value: trend.maLong },
           ].map((item) => (
             <div
               key={item.label}
@@ -238,12 +243,12 @@ export function TrendTab({
 
       <InfoSheet title="흐름은 이렇게 계산합니다" open={sheetOpen} onClose={() => setSheetOpen(false)}>
         <InfoRow label="무엇을 재는가">
-          최근 20거래일의 평균 가격과 60거래일의 평균 가격을 각각 구해 둘의 상하 관계를 봅니다.
-          단순이동평균(SMA)이며 수정주가 종가를 씁니다.
+          최근 {shortN}거래일의 평균 가격과 {longN}거래일의 평균 가격을 각각 구해 둘의 상하
+          관계를 봅니다. 단순이동평균(SMA)이며 수정주가 종가를 씁니다.
         </InfoRow>
         <InfoRow label="정배열 · 역배열">
-          20일 평균이 60일 평균보다 높으면 정배열, 낮으면 역배열이라고 부릅니다. 두 값 중 하나가
-          반드시 크므로 이 값은 항상 존재합니다.
+          {shortN}일 평균이 {longN}일 평균보다 높으면 정배열, 낮으면 역배열이라고 부릅니다. 두
+          값 중 하나가 반드시 크므로 이 값은 항상 존재합니다.
         </InfoRow>
         <InfoRow label="교차">
           두 선의 상하가 뒤바뀐 시점입니다. 스치듯 지나는 교차를 걸러내기 위해 일정 이격 이상
@@ -254,9 +259,10 @@ export function TrendTab({
           전달하려는 것이 가격의 절대 수준이 아니라 두 선의 상하 관계와 교차 지점이기 때문입니다.
           두 선은 같은 축으로 그려 상하 관계가 사실과 어긋나지 않게 했습니다.
         </InfoRow>
-        <InfoRow label="기간 토글은 여기서 무엇을 바꾸는가">
-          20일·60일이라는 비교 대상 자체는 바뀌지 않습니다. 바뀌는 건 차트가 보여주는
-          창의 길이입니다 — 같은 두 선의 관계를 최근 {period}거래일 동안 훑어보는 것입니다.
+        <InfoRow label="단기 · 중기 · 장기는 무엇을 바꾸는가">
+          비교하는 두 평균선 자체가 바뀝니다 — 단기는 5일·20일, 중기는 20일·60일, 장기는
+          60일·120일 평균을 비교합니다. 차트가 보여주는 창의 길이도 그 긴 쪽 평균 기간과
+          같이 늘어납니다.
         </InfoRow>
         <InfoRow label="한계">
           이동평균은 지나간 가격을 평균한 값이라 항상 뒤늦게 움직입니다. 앞으로의 가격을 말해주지

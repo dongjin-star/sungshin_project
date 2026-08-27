@@ -4,11 +4,15 @@
  * 계약 확장 E-01 덕분에 세 기간이 한 응답에 다 들어 있다. 여기서 상태만
  * 바꾸면 순수 렌더로 끝나고 네트워크가 나가지 않는다 — §14.2 의
  * "기간 토글 반영 < 100ms" 가 성립하는 이유다.
+ *
+ * 라벨은 거래일 수(예: "60일")가 아니라 단기/중기/장기다 — 화면 2(위치)
+ * 는 그 기간의 가격 분포를, 화면 3(흐름)은 그 기간에 맞는 MA 쌍을 보여주며
+ * 둘 다 같은 세 티어를 공유한다 (`types.ts` 의 `PeriodDays` 주석 참고).
  */
 
 "use client";
 
-import { PERIOD_OPTIONS, type PeriodDays } from "@/lib/types";
+import { PERIOD_LABEL, PERIOD_OPTIONS, type PeriodDays } from "@/lib/types";
 
 interface Props {
   value: PeriodDays;
@@ -51,7 +55,7 @@ export function PeriodToggle({ value, onChange }: Props) {
               minHeight: 36,
             }}
           >
-            {period}일
+            {PERIOD_LABEL[period]}
           </button>
         );
       })}

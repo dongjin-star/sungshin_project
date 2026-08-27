@@ -29,10 +29,6 @@
   --down: #1d68d9;
   --flat: var(--text-muted);
 
-  /* 캐릭터 — PP-01: 위치에 따라 바뀌지 않는 단일 색이다 */
-  --character: #d4d8dd;
-  --marker-line: #9aa1ab;
-
   /* MA 미니 차트 — 굵기로 구분하며 색에는 의미를 싣지 않는다 (§5.4-a) */
   --ma-short: #17181c;
   --ma-long: #b6bcc4;

@@ -30,57 +30,6 @@ export const ZONE_RANGES: readonly ZoneRange[] = [
 /** 히스테리시스 폭 (%p). 경계에서 이만큼 벗어나야 구간이 바뀐다 (F-POS-05) */
 export const HYSTERESIS_MARGIN = 2.0;
 
-/**
- * 캐릭터 SVG 상의 세로 위치 (0 = 발끝, 1 = 정수리).
- * PRD §7.3 의 "인체 해부학 기준 높이" 열을 그대로 옮긴 값이다.
- * 마커를 그릴 때만 쓰며, 퍼센타일 수치 자체와 혼동하지 않는다.
- */
-export const ZONE_BODY_HEIGHT: Record<BodyZone, number> = {
-  FOOT: 0.03,
-  KNEE: 0.28,
-  WAIST: 0.58,
-  CHEST: 0.7,
-  SHOULDER: 0.82,
-  HEAD: 0.95,
-};
-
-/**
- * 퍼센타일 → 캐릭터 세로 위치 (0 = 발끝, 1 = 정수리).
- *
- * `ZONE_BODY_HEIGHT` 를 **각 구간 퍼센타일 범위의 중앙에 놓인 앵커**로 보고
- * 앵커 사이를 선형 보간한다. 구간 높이를 그대로 쓰면 마커가 6개 위치로만
- * 튀는데, 그러면 §5.3 이 "이 앱에서 가장 중요한 마이크로 인터랙션"이라고
- * 한 기간 토글 애니메이션이 의미를 잃는다. 42% 와 54% 는 같은 '허리'지만
- * 같은 자리는 아니다.
- *
- * ⚠️ 이 값은 **그림을 그리기 위한 좌표일 뿐** 사용자에게 보여줄 수치가
- *    아니다. 화면에 쓰는 퍼센타일은 언제나 실제 값이다 (PP-03).
- */
-export function bodyHeightOf(percentile: number): number {
-  const p = clampPercentile(percentile);
-
-  // 앵커: [구간 중앙 퍼센타일, 신체 높이] — ZONE_RANGES 순서 = 아래에서 위
-  const anchors = ZONE_RANGES.map(
-    (r): [number, number] => [(r.min + r.max) / 2, ZONE_BODY_HEIGHT[r.zone]],
-  );
-
-  const first = anchors[0]!;
-  const last = anchors[anchors.length - 1]!;
-  if (p <= first[0]) return first[1];
-  if (p >= last[0]) return last[1];
-
-  for (let i = 0; i < anchors.length - 1; i += 1) {
-    const [lowP, lowH] = anchors[i]!;
-    const [highP, highH] = anchors[i + 1]!;
-    if (p >= lowP && p <= highP) {
-      const t = (p - lowP) / (highP - lowP);
-      return lowH + t * (highH - lowH);
-    }
-  }
-
-  return last[1];
-}
-
 export function zoneLabel(zone: BodyZone): string {
   return ZONE_RANGES.find((r) => r.zone === zone)!.label;
 }

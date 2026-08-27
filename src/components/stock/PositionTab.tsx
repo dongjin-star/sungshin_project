@@ -11,15 +11,11 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Character } from "./Character";
 import { InfoButton, InfoRow, InfoSheet } from "./InfoSheet";
+import { StockPositionCard } from "./StockPositionCard";
 import { PeriodToggle } from "./PeriodToggle";
-import {
-  formatDateKo,
-  formatPercentileDecimal,
-  formatPrice,
-} from "@/lib/format";
-import { zoneLabel, zoneWithHysteresis } from "@/lib/indicators/zone";
+import { formatDateKo, formatPrice } from "@/lib/format";
+import { zoneWithHysteresis } from "@/lib/indicators/zone";
 import type { BodyZone, Currency, PeriodDays, PositionBlock } from "@/lib/types";
 import type { ExplanationSet } from "@/lib/templates";
 
@@ -91,21 +87,15 @@ export function PositionTab({
             />
           )}
 
-          <div style={{ margin: "1.5rem 0 0.5rem" }}>
-            <Character percentile={position.percentile} zone={shownZone} />
-          </div>
-
-          <div style={{ textAlign: "center", marginTop: "1.25rem" }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
-              {shownZone !== null && zoneLabel(shownZone)}
-              {position.percentile !== null && (
-                <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
-                  {" · "}
-                  {formatPercentileDecimal(position.percentile)}%
-                </span>
-              )}
+          {shownZone !== null && position.percentile !== null && (
+            <div style={{ margin: "1.5rem 0 0" }}>
+              <StockPositionCard
+                periodDays={position.periodDays}
+                percentile={position.percentile}
+                zone={shownZone}
+              />
             </div>
-          </div>
+          )}
 
           <div
             style={{

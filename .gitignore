@@ -1,0 +1,28 @@
+node_modules/
+.next/
+out/
+build/
+
+# 🔴 토스 credential — 절대 커밋 금지 (PRD §11.1)
+.env
+.env.local
+.env*.local
+
+# SQLite 캐시 DB
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
+# Phase 0-4 실측 원시 응답 (종목 마스터 전체 등 대용량 + 계정 정보 포함 가능)
+docs/probe/
+
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# 마스터 동기화 배치 산출물 (D-04). 1.19MB 이고 매일 바뀐다 —
+# 저장소가 아니라 `npm run sync:master` 가 만든다.
+public/search-index.json

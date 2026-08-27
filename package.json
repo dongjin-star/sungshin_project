@@ -1,0 +1,52 @@
+{
+  "name": "posture",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && npm run check:bundle",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check:templates": "tsx scripts/lint-templates.ts",
+    "check:bundle": "tsx scripts/check-bundle-secrets.ts",
+    "probe": "tsx scripts/probe.ts",
+    "db:init": "tsx scripts/db-init.ts",
+    "sync:master": "tsx scripts/sync-master.ts",
+    "prebuild": "npm run check:templates",
+    "sync:candles": "tsx scripts/sync-candles.ts",
+    "build:index": "tsx scripts/build-search-index.ts"
+  },
+  "dependencies": {
+    "@tanstack/query-sync-storage-persister": "^5.62.0",
+    "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-query-persist-client": "^5.62.0",
+    "better-sqlite3": "^12.2.0",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "server-only": "^0.0.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.5.0",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

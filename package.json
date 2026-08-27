@@ -21,6 +21,7 @@
     "build:db-seed": "tsx scripts/build-db-seed.ts"
   },
   "dependencies": {
+    "@next/third-parties": "^15.5.24",
     "@tanstack/query-sync-storage-persister": "^5.62.0",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-query-persist-client": "^5.62.0",

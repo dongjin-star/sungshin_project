@@ -5,8 +5,19 @@
  */
 
 import type { Metadata, Viewport } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 import "./globals.css";
+
+/**
+ * GA4 측정 ID.
+ *
+ * 값 자체는 비밀이 아니다(페이지 소스에 그대로 노출되는 값) — 그래서
+ * `NEXT_PUBLIC_` 접두사를 붙여도 §11.1 의 토스 자격증명 규칙과 충돌하지
+ * 않는다. 다만 로컬 개발 트래픽이 실제 지표에 섞이는 것은 원치 않으므로
+ * production 빌드에서만 로드한다.
+ */
+const GA_MEASUREMENT_ID = "G-BRFJKQE9E4";
 
 export const metadata: Metadata = {
   title: "POSTURE",
@@ -28,6 +39,9 @@ export default function RootLayout({
       <body>
         <div className="app-shell">{children}</div>
       </body>
+      {process.env.NODE_ENV === "production" && (
+        <GoogleAnalytics gaId={GA_MEASUREMENT_ID} />
+      )}
     </html>
   );
 }

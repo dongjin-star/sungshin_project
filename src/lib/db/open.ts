@@ -46,17 +46,23 @@ function createAt(path: string): Database.Database {
  * DB 핸들. 연결에 실패하면 null 을 돌려주고 호출부가 폴백하게 한다.
  * 여기서 던지면 캐시 문제가 곧 서비스 장애가 된다 (§12.4).
  *
- * ── /tmp 폴백을 환경변수가 아니라 실패 자체로 판단한다 (§10.3-a 정정) ──
+ * ── /tmp 폴백을 환경변수가 아니라 실패 자체로 판단한다 (§10.3-a/c 정정) ──
  *
  * 처음엔 `process.env.VERCEL` 로 "여기가 Vercel인가"를 미리 짐작해 경로를
  * 갈랐다. 그런데 실제 배포에서 이 값이 런타임에 잡히지 않아(Vercel 프로젝트
  * 설정에 따라 System Environment Variables 노출 여부가 달랐다), 매 요청이
  * 기본 경로(`./data/posture.db` → 배포 번들 안의 읽기 전용 경로)에 쓰려다
- * `ENOENT`로 실패하고 캐시 없는 폴백으로 빠졌다 — 실제 장애 로그로 확인했다.
+ * `ENOENT`로 실패하고 캐시 없는 폴백으로 빠졌다.
  *
- * 환경변수로 미리 맞히려 하지 않는다. **기본 경로에 실제로 못 쓴다는 사실
- * 자체**를 신호로 삼아 그 자리에서 `/tmp` 로 넘어간다. 어떤 플랫폼이든,
- * 어떤 환경변수 노출 정책이든 이 판단은 항상 맞는다 — 못 쓰면 못 쓰는 것이다.
+ * 그다음엔 "`DATABASE_PATH` 를 명시했으면 폴백하지 않는다"로 고쳤는데, 이번엔
+ * `.env.local` 을 통째로 복사해 Vercel 환경변수에 넣으면서 로컬 전용 값인
+ * `DATABASE_PATH=./data/posture.db` 까지 같이 들어간 사례로 **같은 증상이
+ * 다시 났다** — "명시했다"는 사실이 "여기서 쓸 수 있다"는 뜻이 아니었다.
+ *
+ * 그래서 이제 명시 여부와 무관하게, **못 쓰면 무조건 `/tmp` 로 넘어간다.**
+ * 사용자가 실수로 로컬 경로를 넣었든, 플랫폼이 애초에 읽기 전용이든, 판단
+ * 기준은 하나뿐이다 — 그 경로에 실제로 쓸 수 있는가. 명시된 경로가 안
+ * 먹혔다는 사실은 조용히 넘어가지 않고 크게 경고만 남긴다.
  */
 export function openDb(): Database.Database | null {
   if (instance !== null) return instance;
@@ -69,12 +75,8 @@ export function openDb(): Database.Database | null {
   try {
     db = createAt(primaryPath);
   } catch (primaryErr) {
-    const alreadyTriedFallback = resolve(FALLBACK_PATH) === primaryPath;
-    const explicitPath = process.env.DATABASE_PATH !== undefined;
-
-    if (explicitPath || alreadyTriedFallback) {
-      // 사용자가 명시한 경로거나, 이미 /tmp 를 시도한 것이다.
-      // 조용히 다른 곳으로 새지 않는다 — 더 시도할 곳이 없다.
+    if (resolve(FALLBACK_PATH) === primaryPath) {
+      // 이미 /tmp 를 시도한 것이다 — 더 넘어갈 곳이 없다.
       initFailed = true;
       console.error(
         "[db] SQLite 초기화 실패. 캐시 없이 토스 API 직접 호출로 폴백한다 (§12.4).",
@@ -86,10 +88,14 @@ export function openDb(): Database.Database | null {
     try {
       db = createAt(FALLBACK_PATH);
       usedFallback = true;
+      const explicitPath = process.env.DATABASE_PATH !== undefined;
       console.warn(
-        `[db] 기본 경로(${primaryPath})에 쓸 수 없어 ${FALLBACK_PATH} 로 전환했다 — ` +
-          "서버리스 읽기 전용 배포 환경으로 보인다. " +
-          `원인: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`,
+        `[db] ${explicitPath ? "지정된 DATABASE_PATH" : "기본 경로"}(${primaryPath})에 ` +
+          `쓸 수 없어 ${FALLBACK_PATH} 로 전환했다` +
+          (explicitPath
+            ? " — 이 환경에 맞지 않는 DATABASE_PATH 가 설정돼 있을 수 있다. 확인하라."
+            : " — 서버리스 읽기 전용 배포 환경으로 보인다.") +
+          ` 원인: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`,
       );
     } catch (fallbackErr) {
       initFailed = true;

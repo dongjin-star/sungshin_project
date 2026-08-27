@@ -13,20 +13,21 @@ Vercel 서버리스 함수는 요청마다 아웃바운드 IP가 바뀌므로, �
 프록시를 지나가지 않는다 — CONNECT 터널을 연 뒤로는 Vercel 쪽 Node 프로세스와 토스
 서버가 직접 TLS를 맺고, 프록시는 그 위의 암호화된 바이트를 그대로 흘려보낼 뿐이다.
 
-**이 설계는 검증을 마쳤다.** 로컬에서 프록시를 띄워 실제 토스 API로 토큰 발급·시세
-조회를 왕복시킨 것에 더해, **2026-08-28에 실제로 Fly.io에 배포해 전 과정을 완료했다**
-(`posture-toss-proxy` 앱, dedicated IPv4 확보, `test-connectivity.js` 로 실제 배포본
-연결 확인까지). 아래 절차는 그때 실행해 성공한 명령 그대로다. `flyctl` 버전이 크게
-바뀌지 않았다면 그대로 따라 해도 된다 — 다만 각 단계 뒤의 확인 방법으로 스스로도
-검증하면서 진행하길 권한다.
+**이 절차는 실제 배포·실제 장애·실제 수정을 거쳐 검증됐다** (2026-08-28,
+`posture-toss-proxy` 앱). 처음 배포했을 때 두 가지를 잘못 알고 있었다 — 아래
+절차는 그 실수를 반영해 고친 최종 버전이다. 배경은 `POSTURE-PRD.md` §10.3-a~e 에
+전부 남아 있다.
 
-카드 등록 직후 `fly deploy` 이미지 푸시 단계에서 `401/403` 오류가 한 번 났었다 —
-Fly 빌드 서버 쪽 토큰 전파 지연으로 보이며, **재시도하니 바로 해결됐다.** 같은 오류를
-만나면 당황하지 말고 `fly deploy` 를 한 번 더 실행한다.
+> ⚠️ **가장 중요한 사실 하나.** Fly.io 에서 "IP" 는 **인바운드(ingress)** 와
+> **아웃바운드(egress)** 가 완전히 별개의 자원이다. `flyctl ips allocate-v4` 로
+> 받는 dedicated IPv4 는 **인바운드 전용**이다 — Vercel 이 이 프록시로 *들어올 때*
+> 쓰는 주소이지, 프록시가 토스로 *나갈 때* 쓰는 주소가 아니다. **토스 WTS 에
+> 등록해야 하는 IP 는 egress IP 하나뿐이다.** 처음 배포했을 때 이걸 몰라서
+> ingress IP 를 등록해 놓고 왜 계속 403 이 나는지 한참 헤맸다.
 
 ## 필요한 것
 
-- Fly.io 계정 (무료 가입, 카드 등록 필요 — dedicated IPv4가 유료다. 월 2달러 내외)
+- Fly.io 계정 (무료 가입, 카드 등록 필요)
 - `flyctl` CLI (`fly.io/docs/flyctl/install/`)
 - 토스증권 WTS 접근 권한 (이미 갖고 계신 것)
 - Vercel 프로젝트에 환경변수를 추가할 권한 (이미 갖고 계신 것)
@@ -75,19 +76,38 @@ flyctl deploy
 배포 로그에 `toss-proxy 대기 중 :8080 — 허용 목적지: openapi.tossinvest.com` 이
 보이면 컨테이너 자체는 정상이다.
 
-### 4. 고정 IPv4 확보
+카드 등록 직후라면 이미지 푸시 단계에서 `401`/`403` 이 한 번 날 수 있다 — Fly
+빌드 서버 쪽 권한 전파 지연으로 보이며, **그냥 `flyctl deploy` 를 한 번 더
+실행하면 된다.**
+
+### 4. 인바운드 IP 확인 (등록 대상 아님)
+
+새 앱을 만들면 Fly 가 인바운드용 IP 를 자동으로 붙여주지 않는 경우가 있다 —
+`flyctl ips list` 로 아무것도 없으면 아래로 만들어 둔다:
 
 ```
 flyctl ips allocate-v4
-flyctl ips list
 ```
 
-`--dedicated` 플래그는 필요 없다 — `allocate-v4` 만 실행해도 출력에 `TYPE` 열이
-`public ingress (dedicated, $2/mo)` 로 뜬다(2026-08-28 확인). 안 뜨면 `flyctl ips
-allocate-v4 --help` 로 확인하거나 Fly 대시보드의 "IP Addresses" 메뉴에서 직접
-할당한다. **여기서 나온 IPv4 주소가 토스 WTS에 등록할 값이다.**
+**이 IP 는 raw TCP 서비스(이 프록시가 그렇다)에 반드시 dedicated 여야 한다.**
+비용을 아끼려고 `--shared` 로 받으면 안 된다 — 이유: Fly 의 shared IP 는 여러 앱이
+한 주소를 나눠 쓰며 TLS SNI/HTTP Host 헤더로 목적지 앱을 구분하는데, 순수 TCP
+CONNECT 프록시는 그런 헤더 자체가 없다. Fly 엣지가 연결을 받고도 어디로 돌려야
+할지 몰라 그대로 리셋한다(`ECONNRESET`) — 실제로 겪은 장애다.
 
-### 5. 연결 확인 (Vercel에 연결하기 전에 먼저)
+이 IP 는 **토스에 등록하지 않는다.** Vercel 은 IP 가 아니라 `<앱이름>.fly.dev`
+호스트명으로 접속하므로 신경 쓸 일이 없다 — 그냥 "떠 있는지"만 확인하면 된다.
+
+### 5. 아웃바운드(egress) IP 확보 — 토스에 등록할 값은 이거다
+
+```
+flyctl ips allocate-egress -a <앱이름> -r <배포 리전, 예: nrt>
+```
+
+리전은 `fly.toml` 의 `primary_region` 과 같아야 한다. 결과로 나오는 IPv4 가
+**토스 WTS 에 등록할 IP** 다. 새로 만든 머신에 적용되기까지 5~10분 걸릴 수 있다.
+
+### 6. 연결 확인 (Vercel에 연결하기 전에 먼저)
 
 프로젝트 의존성 없이 도는 독립 스크립트다:
 
@@ -95,16 +115,23 @@ allocate-v4 --help` 로 확인하거나 Fly 대시보드의 "IP Addresses" 메�
 node infra/toss-proxy/test-connectivity.js http://<PROXY_USER>:<PROXY_PASS>@<앱이름>.fly.dev:8080
 ```
 
-`✅ CONNECT 성공` 이 나와야 한다. 여기서 막히면 Vercel에 연결해도 똑같이 막힌다 —
-Fly 배포·시크릿·포트를 먼저 의심한다. `407` 이 나오면 시크릿 값이 안 맞는 것이고,
-타임아웃이면 포트나 앱 이름을 다시 확인한다.
+`✅ CONNECT 성공` 이 나와야 한다. 여기서 막히면 Vercel에 연결해도 똑같이 막힌다.
 
-### 6. 토스 WTS에 IP 등록
+- `407` → 시크릿 값(PROXY_USER/PROXY_PASS)이 안 맞는다
+- `ENOTFOUND`/타임아웃 → 앱 이름이 틀렸거나 인바운드 IP 가 없다 (4단계)
+- `ECONNRESET` → 인바운드 IP 가 **shared** 다 — dedicated 로 다시 받는다 (4단계 경고 참고)
 
-WTS > 설정 > Open API > IP 관리에서 4단계의 dedicated IPv4를 추가한다. 기존에 등록해
-둔 개발 머신 IP는 그대로 둬도 된다 — 여러 개를 등록할 수 있다.
+이 스크립트는 CONNECT 터널이 열리는지만 확인한다. 실제 토스 응답까지 왕복
+확인하려면 가장 확실한 방법은 8단계까지 마치고 Vercel 배포본에서 직접 확인하는
+것이다 — `/api/stock/005930` 이 실제 가격을 돌려주면 전 구간이 통과한 것이다.
 
-### 7. Vercel에 연결
+### 7. 토스 WTS에 IP 등록
+
+WTS > 설정 > Open API > IP 관리에서 **5단계의 egress IP**를 추가한다. 4단계의
+인바운드 IP 는 등록하지 않는다 — 등록해도 토스가 보는 발신 IP 와 다르므로 아무
+효과가 없다. 기존에 등록해 둔 개발 머신 IP 는 그대로 둬도 된다.
+
+### 8. Vercel에 연결
 
 Vercel 프로젝트 > Settings > Environment Variables 에 추가:
 
@@ -116,22 +143,24 @@ Production(및 필요하면 Preview) 환경에 넣고 재배포한다. `src/lib/
 값이 있으면 자동으로 프록시를 거치고, 없으면(로컬 개발) 지금까지처럼 직접 호출한다 —
 코드를 더 바꿀 것은 없다.
 
-### 8. 최종 확인
+### 9. 최종 확인
 
 배포된 Vercel 사이트에서 종목 상세(`/stock/005930`)를 열어 가격이 뜨는지 확인한다.
-막히면 Vercel 함수 로그에서 `[quotes]` 또는 `CONFIG_ERROR` 로그를 먼저 본다 —
-`src/lib/service/quotes.ts` 와 `src/lib/api/respond.ts` 가 403을 조용히 삼키지 않고
-로그에 남기도록 이미 되어 있다.
+막히면 Vercel 함수 로그에서 `[quotes]`·`[db]`·`CONFIG_ERROR` 로그를 먼저 본다 —
+원인을 조용히 삼키지 않도록 이미 로깅돼 있다. `🔴` 로 시작하는 줄이 실제 원인이다.
 
 ## 운영 메모
 
 - 이 프록시는 딱 한 목적지(`openapi.tossinvest.com`)만 중계한다. `ALLOWED_HOSTS`
   시크릿/환경변수로 바꿀 수 있지만 넓힐 이유가 없다.
-- Fly 앱을 재생성하면 IP가 바뀐다. 그러면 6·7단계를 다시 해야 한다.
-- `fly.toml` 에 `auto_stop_machines = "stop"` 이 이미 켜져 있다 — 유휴 시 VM이
-  자동으로 멈추고 요청이 오면 다시 뜬다. 별도 설정 없이도 계속 켜두는 것보다 훨씬
-  싸게 유지된다.
+- **인바운드 IP 는 dedicated 여야 한다 (shared 불가 — raw TCP 라서).** 아웃바운드
+  IP 는 별도로 `allocate-egress` 해야 하고, 그게 토스에 등록할 값이다. 이 둘을
+  헷갈리면 몇 시간을 태운다 — 실제로 그랬다.
+- Fly 앱을 재생성하면 인바운드·아웃바운드 IP 가 둘 다 바뀐다. 그러면 4~5·7·8
+  단계를 다시 해야 한다.
+- `fly.toml` 에 `auto_stop_machines = "stop"` 이 켜져 있다 — 유휴 시 VM이 자동으로
+  멈추고 요청이 오면 다시 뜬다. IP 종류(shared vs dedicated) 문제와는 무관하다는
+  것을 상시 가동으로 바꿔서도 확인했다 — 켜둔 채로 있는 것보다 훨씬 싸게 유지된다.
 - Fly.io는 2024년부터 영구 무료 티어가 없다(신규 계정 $5 크레딧만 제공). 실측 비용은
-  dedicated IPv4 월 $2 가 사실상 전부이고, VM은 auto-stop 덕에 정지 중엔 디스크
-  보관비(초경량 이미지라 무시할 수준)만 나간다 — 켜둔 채로 방치하면 VM 실행비가
-  월 $2 안팎 추가된다.
+  dedicated 인바운드 IPv4 월 $2 + egress IPv4 월 $3.60(리전당) 이 사실상 전부이고,
+  VM은 auto-stop 덕에 정지 중엔 디스크 보관비(초경량 이미지라 무시할 수준)만 나간다.

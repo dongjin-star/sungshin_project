@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
   eslint: { ignoreDuringBuilds: false },
 
+  // Next's file tracing only follows static `import`/`require` calls. Both
+  // of these are read at runtime via `fs.readFileSync`/`better-sqlite3`
+  // with a computed path (`src/lib/db/open.ts`), so tracing never sees
+  // them and Vercel would ship a function bundle without them — every
+  // `openDb()` call would then throw ENOENT (§10.3-a).
+  outputFileTracingIncludes: {
+    "/**": ["src/lib/db/schema.sql", "assets/stock-master.sqlite3"],
+  },
+
   async headers() {
     return [
       {

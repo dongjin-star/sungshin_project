@@ -41,6 +41,7 @@ import {
 } from "../src/lib/toss/endpoints";
 import { toInitials } from "../src/lib/hangul";
 import { writeSearchIndex } from "./build-search-index";
+import { DB_SEED_PATH, writeDbSeed } from "../src/lib/service/db-seed";
 import { TossApiError, toLogFields } from "../src/lib/toss/errors";
 
 try {
@@ -191,6 +192,19 @@ async function main(): Promise<void> {
   // 따로 놀면 검색 결과에만 없는 종목이 생긴다.
   console.log("\n[4] 검색 인덱스 생성");
   writeSearchIndex();
+
+  // ── [5] 종목 마스터 스냅샷 (Vercel 배포용) ─────────────────────────
+  //
+  // Vercel 서버리스는 콜드스타트마다 DB가 비어 있다 (§10.3-a). 이 스냅샷이
+  // 없으면 마스터가 매 배포마다 빈 채로 시작해 모든 종목이 "알 수 없음"이
+  // 된다. 검색 인덱스와 같은 시점에 같이 구워야 둘이 어긋나지 않는다.
+  console.log("\n[5] 종목 마스터 스냅샷 생성 (Vercel 배포용)");
+  if (failed > 0) {
+    console.log("   ⏭️  이번 동기화에 실패가 있었다. 스냅샷은 다음 성공한 동기화에서 갱신한다.");
+  } else {
+    const { count } = writeDbSeed(db);
+    console.log(`   ↳ ${DB_SEED_PATH} — ${count.toLocaleString()}종목`);
+  }
 
   console.log(`\n${"═".repeat(70)}`);
   console.log(` 완료 — ${upserted.toLocaleString()}종목 적재${failed > 0 ? `, ${failed}종목 실패` : ""}`);

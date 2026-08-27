@@ -17,7 +17,8 @@
     "sync:master": "tsx scripts/sync-master.ts",
     "prebuild": "npm run check:templates",
     "sync:candles": "tsx scripts/sync-candles.ts",
-    "build:index": "tsx scripts/build-search-index.ts"
+    "build:index": "tsx scripts/build-search-index.ts",
+    "build:db-seed": "tsx scripts/build-db-seed.ts"
   },
   "dependencies": {
     "@tanstack/query-sync-storage-persister": "^5.62.0",
@@ -28,6 +29,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "server-only": "^0.0.1",
+    "undici": "^6.28.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

@@ -952,6 +952,56 @@ MA60 : n = 60
 
 **B안 채택 이유.** 이 앱의 서버는 얇다 — 토스 API를 호출하고, 계산하고, JSON을 내려주는 것이 전부다. 이걸 위해 배포 대상을 둘로 쪼갤 이유가 없다. Fly.io의 dedicated IPv4는 유료지만 월 단위 비용이 미미하고, Postgres도 같은 플랫폼에서 붙는다.
 
+#### 10.3-a 실제 배포 결정 변경 (2026-08-28)
+
+**Vercel을 유지하기로 했다.** 위 B안(Fly.io 통합형)을 뒤집고 A안에 더 가까운 형태로
+바꿨다 — 다만 A안이 말한 "프론트+프록시 VPS"만큼 크게 쪼개지는 않는다. Next.js 앱
+전체(화면·API 라우트)는 그대로 Vercel에 있고, **토스 API로 나가는 요청만** 별도의
+작은 고정-IP 프록시를 거친다.
+
+| 구성 요소 | 위치 |
+|---|---|
+| Next.js 앱 전체 (화면, `/api/*`) | Vercel |
+| 토스 API 전용 CONNECT 프록시 | Fly.io + dedicated IPv4 (`infra/toss-proxy/`) |
+
+`src/lib/toss/core.ts` 의 `tossFetch()` 가 `TOSS_PROXY_URL` 환경변수 유무로 분기한다 —
+있으면 프록시를 거치고(Vercel 배포), 없으면 직접 호출한다(로컬 개발, 또는 고정 IP
+환경에 직접 배포한 경우). 배포·검증 절차는 `infra/toss-proxy/README.md` 에 있다.
+
+**절충한 것.** B안이 피하려던 것 — 배포 대상 둘, 지연 1홉 추가 — 을 다시 받아들였다.
+다만 A안이 걱정한 "CORS·인증 경계 추가"는 발생하지 않는다. 프록시는 브라우저가
+직접 부르는 대상이 아니라 서버(Vercel 함수)끼리 내부적으로 거치는 경로이기 때문이다.
+DB는 Postgres 로 옮기지 않고 SQLite 를 그대로 쓴다 (D-03, 아래 §16.2).
+
+**남은 문제 — Vercel 서버리스는 파일시스템이 요청 간에 유지되지 않는다.** 쓸 수 있는
+곳은 `/tmp` 뿐이고 콜드스타트마다 비워진다. 캔들 캐시(`price_candle`)·토큰은 원래도
+"없으면 다시 받는다"로 설계돼 있어 이 문제를 견디지만(§10.4), **종목 마스터
+(`stock`)는 그렇지 않다** — 비어 있으면 `getStock()` 이 항상 null 을 돌려주고
+`/api/quotes`·`/api/stock/{symbol}`·`/api/watchlist` 전부가 "알 수 없는 종목"으로
+실패한다. 마스터는 토스를 실시간으로 다시 불러 채울 수 있는 값이 아니다.
+
+**대응.** `stock` 테이블만 별도 SQLite 파일(`assets/stock-master.sqlite3`)로 떠서
+저장소에 커밋한다. `openDb()` 가 콜드스타트로 빈 DB를 열면(`countStocks() === 0`)
+이 스냅샷에서 즉시 복원한다 — `src/lib/db/open.ts` 의 `restoreMasterSeedIfEmpty()`.
+`npm run sync:master` 를 돌리면 검색 인덱스(`public/search-index.json`)와 이 스냅샷이
+같은 시점에 함께 갱신된다. Next 의 파일 트레이싱은 런타임에 계산된 경로로 읽는
+파일(스냅샷·`schema.sql`)을 자동으로 잡아내지 못하므로 `next.config.ts` 의
+`outputFileTracingIncludes` 로 명시했다 — 로컬 빌드에서 `.next/server/**/*.nft.json`
+에 두 파일이 실제로 잡히는 것까지 확인했다(Vercel 빌드가 참조하는 것과 같은 산출물).
+
+캔들·토큰까지 포함해 로컬에서 콜드스타트를 흉내 낸 왕복 검증(빈 DB → 스냅샷 복원 →
+`getStock('005930')` 정상 반환)도 마쳤다. 다만 실제 Vercel 런타임에서의 최종 확인은
+배포 후에만 가능하다 — 아래 §10.3-b 참조.
+
+#### 10.3-b 배포 전 확인할 것 (제가 대신 할 수 없는 부분)
+
+- [ ] `infra/toss-proxy/README.md` 절차대로 Fly.io에 프록시 배포 + dedicated IPv4 확보
+- [ ] 그 IPv4를 토스 WTS > IP 관리에 등록
+- [ ] Vercel 환경변수에 `TOSS_PROXY_URL`, `TOSS_CLIENT_ID`, `TOSS_CLIENT_SECRET` 설정
+- [ ] 배포 후 `/stock/005930` 등에서 실제로 가격이 뜨는지 확인
+- [ ] 안 뜨면 Vercel 함수 로그에서 `[db]`·`[quotes]`·`CONFIG_ERROR` 로그를 먼저 본다 —
+      원인을 조용히 삼키지 않도록 이미 로깅돼 있다
+
 | 영역 | 선택 | 이유 |
 |---|---|---|
 | 프레임워크 | Next.js 15 (App Router) | Route Handler로 BFF까지 한 코드베이스 |

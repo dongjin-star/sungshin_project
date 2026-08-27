@@ -1,0 +1,32 @@
+# Fly.io 배포 설정 — 토스 API 전용 고정 IP 프록시
+#
+# ⚠️ `app` 이름은 Fly.io 전체에서 유일해야 한다. 아래 값은 예시이므로
+#    실제 배포 전에 고유한 이름으로 바꾼다 (`fly apps create <이름>`).
+#
+# ⚠️ 이 파일의 네트워킹 문법(`[[services]]` 블록)은 raw TCP 를 그대로
+#    포워딩하는 표준적인 형태를 따랐지만, flyctl 버전에 따라 스키마가
+#    바뀔 수 있다. `fly deploy` 실행 후 반드시 `infra/toss-proxy/README.md`
+#    의 "배포 확인" 절차로 실제 연결을 검증한다 — 이 파일 자체를 100%
+#    신뢰하지 말고 결과로 확인한다.
+app = "changeme-toss-proxy"
+primary_region = "nrt" # 도쿄. 서울과 가장 가깝다. 자유롭게 바꿔도 된다.
+
+[build]
+
+[env]
+  PORT = "8080"
+  ALLOWED_HOSTS = "openapi.tossinvest.com"
+  # PROXY_USER / PROXY_PASS 는 여기 쓰지 않는다.
+  # `fly secrets set PROXY_USER=... PROXY_PASS=...` 로 넣는다 (§11.1 과 동일한 취급).
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8080
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 50
+    soft_limit = 25

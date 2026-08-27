@@ -6,14 +6,30 @@
  */
 
 import Database from "better-sqlite3";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+
+import { countStocks, upsertStocks, type StockRow } from "./repo";
+import { DB_SEED_PATH } from "../service/db-seed";
 
 let instance: Database.Database | null = null;
 let initFailed = false;
 
+/**
+ * DB 파일 경로.
+ *
+ * ⚠️ Vercel 서버리스 함수는 배포 번들이 읽기 전용이다. 쓸 수 있는 곳은
+ *    `/tmp` 뿐이고, 그마저도 인스턴스가 재활용되면(콜드스타트) 비워진다.
+ *    `DATABASE_PATH` 를 명시하지 않았다면 `process.env.VERCEL` 로 이
+ *    환경을 감지해 `/tmp` 를 쓴다 — 그러지 않으면 `mkdirSync` 가
+ *    EROFS 로 던지고 매 요청이 §12.4 폴백(캐시 없이 직접 호출)으로
+ *    빠진다. 콜드스타트로 비워진 마스터는 `openDb()` 가 스냅샷에서
+ *    복원한다 (§10.3-a, `restoreMasterSeedIfEmpty` 참고).
+ */
 export function dbPath(): string {
-  return resolve(process.env.DATABASE_PATH ?? "./data/posture.db");
+  if (process.env.DATABASE_PATH) return resolve(process.env.DATABASE_PATH);
+  if (process.env.VERCEL) return "/tmp/posture.db";
+  return resolve("./data/posture.db");
 }
 
 /**
@@ -33,6 +49,7 @@ export function openDb(): Database.Database | null {
     db.pragma("foreign_keys = ON");
     db.exec(readFileSync(join(process.cwd(), "src/lib/db/schema.sql"), "utf8"));
     migrate(db);
+    restoreMasterSeedIfEmpty(db);
 
     instance = db;
     return db;
@@ -76,6 +93,51 @@ function migrate(db: Database.Database): void {
 
     db.exec(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${ddl}`);
     console.log(`[db] 마이그레이션: ${table}.${column} 추가`);
+  }
+}
+
+/**
+ * 콜드스타트로 비워진 종목 마스터를 스냅샷에서 복원한다 (§10.3-a).
+ *
+ * `stock` 이 이미 채워져 있으면(로컬 개발, 또는 같은 인스턴스의 두 번째
+ * 요청) 아무것도 하지 않는다 — 매 요청마다 15,262행을 다시 읽어들일
+ * 이유가 없다.
+ *
+ * 실패해도 던지지 않는다. 마스터가 비어 있는 채로 시작하는 것은 이미
+ * §12.4 가 감당하는 상황(모든 종목이 "알 수 없음")이고, 여기서 던지면
+ * DB 연결 자체가 실패한 것처럼 보여 캔들 캐시까지 같이 잃는다.
+ */
+function restoreMasterSeedIfEmpty(db: Database.Database): void {
+  try {
+    if (countStocks(db) > 0) return;
+
+    const seedPath = join(process.cwd(), DB_SEED_PATH);
+    if (!existsSync(seedPath)) {
+      // 로컬 개발은 `npm run sync:master` 가 채우기 전까지 원래 비어 있다.
+      // 배포 환경인데 없다면 그건 번들링이 빠진 것이므로 눈에 띄게 알린다.
+      if (process.env.VERCEL) {
+        console.error(
+          `🔴 [db] 종목 마스터 스냅샷을 찾지 못했다 (${DB_SEED_PATH}). ` +
+            "이 배포에서는 모든 종목이 '알 수 없음'으로 보인다. " +
+            "next.config.ts 의 outputFileTracingIncludes 설정과 파일 커밋 여부를 확인하라.",
+        );
+      }
+      return;
+    }
+
+    const seed = new Database(seedPath, { readonly: true, fileMustExist: true });
+    try {
+      const rows = seed.prepare<[], StockRow>("SELECT * FROM stock").all();
+      upsertStocks(db, rows);
+      console.log(`[db] 종목 마스터 ${rows.length.toLocaleString()}건을 스냅샷에서 복원했다.`);
+    } finally {
+      seed.close();
+    }
+  } catch (err) {
+    console.error(
+      "[db] 종목 마스터 스냅샷 복원 실패:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 

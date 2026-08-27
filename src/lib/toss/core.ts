@@ -15,6 +15,8 @@
  *    메시지·응답 본문 어디에도 값 자체를 싣지 않는다 (§11.1).
  */
 
+import { ProxyAgent, fetch as undiciFetch, type Dispatcher } from "undici";
+
 import {
   TOSS_TIMEOUT_MS,
   TossApiError,
@@ -24,6 +26,67 @@ import {
 import { withRateLimit, type RateLimitGroup } from "./rate-limit";
 
 const DEFAULT_BASE = "https://openapi.tossinvest.com";
+
+// ── 아웃바운드 프록시 (Vercel 배포용) ────────────────────────────────
+//
+// PRD §0.3(P-02): 토스 API는 WTS에 등록한 허용 IP 외의 호출을 403으로
+// 차단하는데, Vercel 서버리스 함수는 요청마다 아웃바운드 IP가 바뀐다.
+// 고정 IP를 가진 실행 환경(Fly.io 등)으로 옮기는 것이 원안(§10.3 B)이지만,
+// Vercel을 유지하기로 했다면 **고정 IP를 가진 소형 포워드 프록시**를 앞에
+// 두고 토스로 나가는 요청만 그리로 우회시키는 편이 가장 작은 변경이다
+// (`infra/toss-proxy/` 에 배포 가능한 프록시를 함께 두었다).
+//
+// `TOSS_PROXY_URL` 이 설정돼 있으면 그 프록시를 거친다. 없으면(로컬 개발,
+// 또는 고정 IP 환경에 직접 배포한 경우) 지금까지처럼 직접 호출한다 —
+// 이 분기 하나로 두 배포 형태를 동시에 지원한다.
+//
+//   TOSS_PROXY_URL=http://user:pass@your-proxy.fly.dev:8080
+//
+// 🔒 URL에 프록시 인증 정보가 들어간다. `.env.local`/배포 시크릿에만
+//    두고 절대 클라이언트로 내려가는 코드에서 참조하지 않는다 (§11.1과
+//    동일한 취급).
+let proxyAgent: ProxyAgent | null = null;
+let proxyAgentFor: string | undefined;
+
+function dispatcher(): Dispatcher | undefined {
+  const url = process.env.TOSS_PROXY_URL;
+  if (!url) return undefined;
+
+  // URL이 바뀌는 일은 실질적으로 없지만(런타임 중 재배포 없이는), 매 요청마다
+  // 새로 만들지 않도록 캐시한다 — ProxyAgent는 커넥션 풀을 들고 있다.
+  if (proxyAgent === null || proxyAgentFor !== url) {
+    proxyAgent?.close().catch(() => undefined);
+    proxyAgent = new ProxyAgent(url);
+    proxyAgentFor = url;
+  }
+  return proxyAgent;
+}
+
+/**
+ * 토스로 나가는 모든 요청은 이 함수를 거친다.
+ *
+ * 전역 `fetch` 는 Node의 `dispatcher` 확장을 받지만 undici 버전에 따라
+ * 동작이 갈릴 수 있어, 프록시가 필요한 경로는 undici를 명시적으로 써서
+ * 배포 환경(Node 런타임 버전)에 기대지 않게 한다.
+ *
+ * 여기서 쓰는 init 형태는 두 호출부(`issueToken`·`rawGet`)가 실제로 쓰는
+ * 것뿐이다 — DOM lib 의 `RequestInit`(body: `ReadableStream` 등 포함)과
+ * undici 의 `RequestInit` 타입이 완전히 호환되지 않아, 여기서 폭을 좁혀
+ * 둘 다 만족시킨다.
+ */
+interface TossRequestInit {
+  method?: string;
+  headers: Record<string, string>;
+  body?: string | URLSearchParams;
+  signal: AbortSignal;
+}
+
+function tossFetch(url: string, init: TossRequestInit): Promise<Response> {
+  const agent = dispatcher();
+  if (agent === undefined) return fetch(url, init);
+
+  return undiciFetch(url, { ...init, dispatcher: agent }) as unknown as Promise<Response>;
+}
 
 /** 토스 응답 envelope. 모든 200 응답이 `result` 로 감싸여 온다 (실측 확인) */
 interface TossEnvelope<T> {
@@ -112,7 +175,7 @@ async function issueToken(): Promise<string> {
   const { clientId, clientSecret, base } = credentials();
 
   return withRateLimit("AUTH", async () => {
-    const res = await fetch(`${base}/oauth2/token`, {
+    const res = await tossFetch(`${base}/oauth2/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -201,7 +264,7 @@ async function rawGet(path: string, token: string): Promise<Response> {
   const { base } = credentials();
 
   try {
-    return await fetch(`${base}${path}`, {
+    return await tossFetch(`${base}${path}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(TOSS_TIMEOUT_MS),
     });

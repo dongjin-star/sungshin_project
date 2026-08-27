@@ -1,56 +1,29 @@
 /**
- * 진입점 (PRD §3.1)
+ * 메인 화면 — 관심종목 (PRD §5.6, §3.1 기본 진입점)
  *
- * §3.1 이 정한 분기를 그대로 구현한다.
+ * ── 왜 항상 관심종목인가 ──────────────────────────────────────────
  *
- *     관심종목 있음 → 화면 5 (관심종목)   ← 기본 진입점
- *     관심종목 없음 → 화면 1 (종목 검색)
+ * §3.1 은 "관심종목 없음 → 화면 1(검색)"으로 그려져 있고 처음엔 그렇게
+ * 만들었다. 그런데 **같은 주소가 때에 따라 다른 화면을 보여주는 것**이
+ * 실제로 써보면 혼란스럽다. 종목을 담기 전에는 검색이 뜨고 담은 뒤에는
+ * 목록이 뜨니, "내 종목이 어디 있지"를 되묻게 된다.
  *
- * 근거는 §3.2 ① — 페르소나 A·C 의 재방문 동기는 "내 종목 확인"이다.
- * 매번 검색부터 시작하게 하면 재방문 비용이 커진다. 최초 방문자만 검색으로
- * 보낸다.
+ * 그래서 `/` 는 언제나 관심종목이다. 담은 게 없으면 §5.6 이 정의한
+ * `EMPTY` 상태가 뜨고, 거기서 검색으로 한 번에 갈 수 있다. §3.2 ① 이
+ * 말한 "재방문 동기는 내 종목 확인"은 그대로 지켜지고, 최초 방문자가
+ * 치르는 비용은 탭 한 번이다.
  *
- * ── 왜 리다이렉트가 아니라 한 경로에서 갈라지는가 ────────────────
- *
- * 관심종목은 localStorage 에 있어서 **서버는 어느 쪽을 보여줄지 모른다.**
- * 서버에서 리다이렉트할 수 없고, 클라이언트에서 `router.replace` 를 쓰면
- * 주소가 한 번 튀고 뒤로가기 이력이 지저분해진다. 같은 주소에서 갈라지는
- * 편이 사용자에게 자연스럽다.
+ * 검색은 `/search` 에 있다 (§3.3 검색 재진입).
  */
 
-"use client";
-
-import { SearchScreen } from "@/components/SearchScreen";
 import { DisclaimerBar } from "@/components/DisclaimerBar";
 import { WatchlistScreen } from "@/components/watchlist/WatchlistScreen";
-import { useWatchlist } from "@/lib/watchlist/store";
 
 export default function Home() {
-  const { items, ready } = useWatchlist();
-
   return (
     <>
-      {/* 저장소를 읽기 전에는 어느 쪽도 단정하지 않는다. 한 프레임이면 끝나며,
-          여기서 검색 화면을 먼저 그리면 관심종목 사용자에게 매번 깜빡인다. */}
-      {!ready ? <Booting /> : items.length > 0 ? <WatchlistScreen /> : <SearchScreen />}
+      <WatchlistScreen />
       <DisclaimerBar />
     </>
-  );
-}
-
-/** §5.7 상태 전이도의 BOOTING */
-function Booting() {
-  return (
-    <div style={{ padding: "1.25rem 1rem" }} aria-busy="true" aria-label="불러오는 중">
-      <span
-        style={{
-          display: "block",
-          width: "35%",
-          height: 24,
-          background: "var(--surface)",
-          borderRadius: 6,
-        }}
-      />
-    </div>
   );
 }

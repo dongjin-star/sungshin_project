@@ -14,6 +14,7 @@
  *   · 모바일 자동 포커스 안 함 (키보드가 화면을 가림)
  */
 
+import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_LIMIT, search, type SearchEntry } from "@/lib/search/match";
@@ -69,13 +70,43 @@ export function SearchScreen() {
 
   return (
     <div>
-      <header style={{ padding: "1.25rem 1rem 0.75rem" }}>
-        <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
-          종목 검색
-        </h1>
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
-          종목명, 초성, 티커, 종목코드로 찾을 수 있습니다.
-        </p>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "0.75rem",
+          padding: "1.25rem 1rem 0.75rem",
+        }}
+      >
+        <span>
+          <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
+            종목 검색
+          </h1>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+            종목명, 초성, 티커, 종목코드로 찾을 수 있습니다.
+          </p>
+        </span>
+
+        {/* §3.3 검색 재진입의 역방향 — 담은 종목을 보러 돌아가는 길이다.
+            이게 없으면 ♡ 로 담은 뒤 관심종목으로 갈 방법이 없다. */}
+        <Link
+          href="/"
+          style={{
+            flexShrink: 0,
+            padding: "0.375rem 0.625rem",
+            marginTop: "0.125rem",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            color: "var(--text-muted)",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          관심종목
+        </Link>
       </header>
 
       <div style={{ padding: "0 1rem 0.75rem", position: "sticky", top: 0, background: "var(--bg)", zIndex: 10 }}>

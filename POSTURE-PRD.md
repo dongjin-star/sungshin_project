@@ -993,14 +993,41 @@ DB는 Postgres 로 옮기지 않고 SQLite 를 그대로 쓴다 (D-03, 아래 §
 `getStock('005930')` 정상 반환)도 마쳤다. 다만 실제 Vercel 런타임에서의 최종 확인은
 배포 후에만 가능하다 — 아래 §10.3-b 참조.
 
-#### 10.3-b 배포 전 확인할 것 (제가 대신 할 수 없는 부분)
+#### 10.3-b 배포 전 확인할 것
 
-- [ ] `infra/toss-proxy/README.md` 절차대로 Fly.io에 프록시 배포 + dedicated IPv4 확보
-- [ ] 그 IPv4를 토스 WTS > IP 관리에 등록
-- [ ] Vercel 환경변수에 `TOSS_PROXY_URL`, `TOSS_CLIENT_ID`, `TOSS_CLIENT_SECRET` 설정
-- [ ] 배포 후 `/stock/005930` 등에서 실제로 가격이 뜨는지 확인
-- [ ] 안 뜨면 Vercel 함수 로그에서 `[db]`·`[quotes]`·`CONFIG_ERROR` 로그를 먼저 본다 —
-      원인을 조용히 삼키지 않도록 이미 로깅돼 있다
+- [x] `infra/toss-proxy/README.md` 절차대로 Fly.io에 프록시 배포 + dedicated IPv4 확보
+      (2026-08-28, `posture-toss-proxy` 앱)
+- [x] 그 IPv4를 토스 WTS > IP 관리에 등록
+- [x] Vercel 환경변수에 `TOSS_PROXY_URL`, `TOSS_CLIENT_ID`, `TOSS_CLIENT_SECRET` 설정
+- [x] 배포 후 `/stock/005930` 등에서 실제로 가격이 뜨는지 확인 → **실패, §10.3-c 로 원인 규명·수정**
+- [x] 안 뜨면 Vercel 함수 로그에서 `[db]`·`[quotes]`·`CONFIG_ERROR` 로그를 먼저 본다
+
+#### 10.3-c 실배포에서 드러난 결함 — `process.env.VERCEL` 감지가 런타임에 안 먹었다 (2026-08-28)
+
+**증상.** 배포 후 `/api/quotes`는 `{"items":[]}`, `/api/stock/{symbol}`은 전부
+`404 NOT_FOUND`. Vercel Runtime Logs 에서 원인이 그대로 찍혔다.
+
+```
+[db] SQLite 초기화 실패. 캐시 없이 토스 API 직접 호출로 폴백한다 (§12.4).
+ENOENT: no such file or directory, mkdir '/var/task/data'
+```
+
+**원인.** `src/lib/db/open.ts` 의 `dbPath()` 는 `process.env.VERCEL` 값으로 "여기가
+Vercel인가"를 미리 짐작해 `/tmp` 로 경로를 갈랐다(§10.3-a 최초 버전). 그런데 실제
+런타임에는 이 값이 잡히지 않았다 — Vercel이 System Environment Variables를 함수
+런타임에 자동 노출할지는 프로젝트 설정에 따라 갈릴 수 있다. 그 결과 매 요청이 배포
+번들 안의 읽기 전용 경로(`./data/posture.db` → `/var/task/data`)에 쓰려다 실패했고,
+DB 없는 폴백(§12.4)으로 빠져 종목 마스터가 항상 비어 있었다. 프록시·IP 등록은 전부
+정상이었다 — 애초에 그쪽까지 요청이 가지도 못했다.
+
+**교훈.** 배포 플랫폼을 환경변수로 미리 맞히려 하지 않는다. **기본 경로에 실제로
+쓰기를 시도해보고, 실패하면 그 실패 자체를 신호로 `/tmp` 로 전환**하도록 고쳤다
+(`openDb()`). 어떤 플랫폼이든, 어떤 환경변수 노출 정책이든 이 판단은 항상 맞는다 —
+못 쓰면 못 쓰는 것이다. `DATABASE_PATH` 를 명시한 경우는 폴백하지 않는다(사용자가
+지정한 경로를 조용히 무시하지 않기 위해서).
+
+로컬 개발 경로(`.env.local` 의 `DATABASE_PATH`)는 이 변경으로 영향받지 않는다 —
+그 경로는 항상 쓰기에 성공하므로 폴백 분기를 타지 않는다.
 
 | 영역 | 선택 | 이유 |
 |---|---|---|

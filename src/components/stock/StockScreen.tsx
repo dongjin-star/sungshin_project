@@ -19,12 +19,10 @@ import { useCallback, useEffect, useState } from "react";
 import { PlainTab } from "./PlainTab";
 import { PositionTab } from "./PositionTab";
 import { TrendTab } from "./TrendTab";
+import { WatchButton } from "./WatchButton";
 import { formatAsOf, formatChangeRate, formatPrice } from "@/lib/format";
-import {
-  DEFAULT_PERIOD,
-  type PeriodDays,
-  type StockAnalysisResponse,
-} from "@/lib/types";
+import { usePreferences } from "@/lib/preferences";
+import type { PeriodDays, StockAnalysisResponse } from "@/lib/types";
 
 type TabId = "position" | "trend" | "plain";
 
@@ -42,8 +40,13 @@ type LoadState =
 export function StockScreen({ symbol }: { symbol: string }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [tab, setTab] = useState<TabId>("position");
-  const [period, setPeriod] = useState<PeriodDays>(DEFAULT_PERIOD);
   const [attempt, setAttempt] = useState(0);
+
+  // 기간은 화면을 옮겨 다녀도 유지된다 (§6.2). 관심종목에서 250일로 맞춰놓고
+  // 종목을 눌렀는데 120일로 돌아가면 사용자는 자기가 보던 척도를 잃는다.
+  const { prefs, update } = usePreferences();
+  const period = prefs.periodDays;
+  const setPeriod = (p: PeriodDays): void => update({ periodDays: p });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -265,6 +268,11 @@ function Header({ data }: { data: StockAnalysisResponse }) {
         >
           {data.market}
         </span>
+
+        {/* §5.3 CTA — 관심종목 추가 */}
+        <span style={{ marginLeft: "auto" }}>
+          <WatchButton symbol={data.symbol} name={data.name} />
+        </span>
       </div>
 
       <div style={{ marginTop: 2, fontSize: "0.75rem", color: "var(--text-subtle)" }}>
@@ -293,7 +301,7 @@ function Shell({ symbol, children }: { symbol: string; children: React.ReactNode
     <div>
       <div style={{ padding: "1.25rem 1rem 0" }}>
         <Link
-          href="/"
+          href="/search"
           style={{ fontSize: "0.8125rem", color: "var(--text-muted)", textDecoration: "none" }}
         >
           ← 검색으로

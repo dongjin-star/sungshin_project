@@ -104,7 +104,7 @@ export function PlainTab({ explanation, period, hasPosition, hasTrend }: Props) 
 
       <div style={{ marginTop: "1.75rem" }}>
         <Link
-          href="/"
+          href="/search"
           style={{
             display: "block",
             padding: "0.8125rem",

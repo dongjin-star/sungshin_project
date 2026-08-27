@@ -23,6 +23,12 @@ docs/probe/
 next-env.d.ts
 coverage/
 
-# 마스터 동기화 배치 산출물 (D-04). 1.19MB 이고 매일 바뀐다 —
-# 저장소가 아니라 `npm run sync:master` 가 만든다.
-public/search-index.json
+# public/search-index.json 은 더 이상 여기서 제외하지 않고 커밋한다.
+#
+# 원래는 "npm run sync:master 가 만드는 산출물이니 저장소에 안 둔다"는
+# 이유로 제외했다. 그런데 Vercel 배포는 저장소에 있는 파일만 정적으로
+# 서빙하고 빌드 스크립트가 sync:master 를 돌리지 않으므로, 이 파일이
+# 없으면 화면 1 이 전부 GET /search-index.json 404 로 죽는다
+# (2026-08-28 실제 장애). 매일 최신 상태로 유지하는 것보다 검색이
+# 동작하는 게 우선이라 커밋해 둔다. 갱신은 `npm run sync:master` 실행
+# 후 결과를 커밋하는 식으로 한다.

@@ -13,11 +13,16 @@ Vercel 서버리스 함수는 요청마다 아웃바운드 IP가 바뀌므로, �
 프록시를 지나가지 않는다 — CONNECT 터널을 연 뒤로는 Vercel 쪽 Node 프로세스와 토스
 서버가 직접 TLS를 맺고, 프록시는 그 위의 암호화된 바이트를 그대로 흘려보낼 뿐이다.
 
-**이 설계는 이미 검증했다.** 로컬에서 프록시를 띄우고 실제 토스 API로 토큰 발급과
-시세 조회를 왕복시켜 성공을 확인했다(`src/lib/toss/core.ts` 의 `TOSS_PROXY_URL` 분기와
-짝을 이룬다). 아래 절차에서 확인되지 않은 것은 **Fly.io 배포 자체의 정확한 명령·문법**
-뿐이다 — `flyctl` 버전에 따라 조금씩 달라질 수 있으니, 각 단계 뒤에 있는 확인 방법으로
-직접 검증하면서 진행한다.
+**이 설계는 검증을 마쳤다.** 로컬에서 프록시를 띄워 실제 토스 API로 토큰 발급·시세
+조회를 왕복시킨 것에 더해, **2026-08-28에 실제로 Fly.io에 배포해 전 과정을 완료했다**
+(`posture-toss-proxy` 앱, dedicated IPv4 확보, `test-connectivity.js` 로 실제 배포본
+연결 확인까지). 아래 절차는 그때 실행해 성공한 명령 그대로다. `flyctl` 버전이 크게
+바뀌지 않았다면 그대로 따라 해도 된다 — 다만 각 단계 뒤의 확인 방법으로 스스로도
+검증하면서 진행하길 권한다.
+
+카드 등록 직후 `fly deploy` 이미지 푸시 단계에서 `401/403` 오류가 한 번 났었다 —
+Fly 빌드 서버 쪽 토큰 전파 지연으로 보이며, **재시도하니 바로 해결됐다.** 같은 오류를
+만나면 당황하지 말고 `fly deploy` 를 한 번 더 실행한다.
 
 ## 필요한 것
 
@@ -73,11 +78,12 @@ flyctl deploy
 ### 4. 고정 IPv4 확보
 
 ```
-flyctl ips allocate-v4 --dedicated
+flyctl ips allocate-v4
 flyctl ips list
 ```
 
-`--dedicated` 플래그명은 flyctl 버전에 따라 다를 수 있다. 안 먹으면 `flyctl ips
+`--dedicated` 플래그는 필요 없다 — `allocate-v4` 만 실행해도 출력에 `TYPE` 열이
+`public ingress (dedicated, $2/mo)` 로 뜬다(2026-08-28 확인). 안 뜨면 `flyctl ips
 allocate-v4 --help` 로 확인하거나 Fly 대시보드의 "IP Addresses" 메뉴에서 직접
 할당한다. **여기서 나온 IPv4 주소가 토스 WTS에 등록할 값이다.**
 
@@ -122,5 +128,10 @@ Production(및 필요하면 Preview) 환경에 넣고 재배포한다. `src/lib/
 - 이 프록시는 딱 한 목적지(`openapi.tossinvest.com`)만 중계한다. `ALLOWED_HOSTS`
   시크릿/환경변수로 바꿀 수 있지만 넓힐 이유가 없다.
 - Fly 앱을 재생성하면 IP가 바뀐다. 그러면 6·7단계를 다시 해야 한다.
-- 비용은 dedicated IPv4(월 약 2달러) + Fly 앱의 최소 실행 비용이다. 트래픽이 적으면
-  free allowance 안에서 거의 끝난다.
+- `fly.toml` 에 `auto_stop_machines = "stop"` 이 이미 켜져 있다 — 유휴 시 VM이
+  자동으로 멈추고 요청이 오면 다시 뜬다. 별도 설정 없이도 계속 켜두는 것보다 훨씬
+  싸게 유지된다.
+- Fly.io는 2024년부터 영구 무료 티어가 없다(신규 계정 $5 크레딧만 제공). 실측 비용은
+  dedicated IPv4 월 $2 가 사실상 전부이고, VM은 auto-stop 덕에 정지 중엔 디스크
+  보관비(초경량 이미지라 무시할 수준)만 나간다 — 켜둔 채로 방치하면 VM 실행비가
+  월 $2 안팎 추가된다.

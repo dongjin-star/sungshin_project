@@ -323,10 +323,42 @@ function Shell({ symbol, children }: { symbol: string; children: React.ReactNode
 function Skeleton() {
   return (
     <div style={{ padding: "1rem" }} aria-busy="true" aria-label="불러오는 중">
-      <div style={{ height: 28, width: "45%", background: "var(--surface)", borderRadius: 6 }} />
-      <div style={{ height: 16, width: "30%", background: "var(--surface)", borderRadius: 6, marginTop: 10 }} />
-      <div style={{ height: 36, width: "60%", background: "var(--surface)", borderRadius: 6, marginTop: 14 }} />
-      <div style={{ height: 240, background: "var(--surface)", borderRadius: 10, marginTop: 24 }} />
+      <div
+        className="skeleton-pulse"
+        style={{ height: 28, width: "45%", background: "var(--surface)", borderRadius: 6 }}
+      />
+      <div
+        className="skeleton-pulse"
+        style={{
+          height: 16,
+          width: "30%",
+          background: "var(--surface)",
+          borderRadius: 6,
+          marginTop: 10,
+          animationDelay: "0.1s",
+        }}
+      />
+      <div
+        className="skeleton-pulse"
+        style={{
+          height: 36,
+          width: "60%",
+          background: "var(--surface)",
+          borderRadius: 6,
+          marginTop: 14,
+          animationDelay: "0.2s",
+        }}
+      />
+      <div
+        className="skeleton-pulse"
+        style={{
+          height: 240,
+          background: "var(--surface)",
+          borderRadius: 10,
+          marginTop: 24,
+          animationDelay: "0.3s",
+        }}
+      />
     </div>
   );
 }

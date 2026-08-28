@@ -376,6 +376,7 @@ function Skeleton({ count }: { count: number }) {
         >
           <span style={{ flex: 1 }}>
             <span
+              className="skeleton-pulse"
               style={{
                 display: "block",
                 width: "40%",
@@ -385,6 +386,7 @@ function Skeleton({ count }: { count: number }) {
               }}
             />
             <span
+              className="skeleton-pulse"
               style={{
                 display: "block",
                 width: "60%",
@@ -392,11 +394,19 @@ function Skeleton({ count }: { count: number }) {
                 marginTop: 8,
                 background: "var(--surface)",
                 borderRadius: 4,
+                animationDelay: "0.1s",
               }}
             />
           </span>
           <span
-            style={{ width: 64, height: 14, background: "var(--surface)", borderRadius: 4 }}
+            className="skeleton-pulse"
+            style={{
+              width: 64,
+              height: 14,
+              background: "var(--surface)",
+              borderRadius: 4,
+              animationDelay: "0.2s",
+            }}
           />
         </li>
       ))}

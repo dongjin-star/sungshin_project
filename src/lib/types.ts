@@ -244,3 +244,14 @@ export type ClientErrorCode =
 export interface ApiErrorResponse {
   error: { code: ClientErrorCode; message: string };
 }
+
+/**
+ * GET /api/stock/{symbol}/explain — "쉬운 설명" 탭 AI 부연 설명 (D-04).
+ *
+ * 위치·흐름 문장을 하나로 합치지 않는 R-01 원칙을 여기서도 유지한다 —
+ * 그래서 필드가 둘로 나뉜다. 계산 불가였던 쪽은 null이다.
+ */
+export interface PlainExplanationResponse {
+  positionDetail: string | null;
+  trendDetail: string | null;
+}

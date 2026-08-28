@@ -21,11 +21,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import type { ExplanationSet } from "@/lib/templates";
-import type { PeriodDays } from "@/lib/types";
+import type { PeriodDays, PlainExplanationResponse } from "@/lib/types";
 
 interface Props {
+  symbol: string;
   explanation: ExplanationSet;
   period: PeriodDays;
   /** 위치를 계산할 수 있었는가 */
@@ -34,7 +36,7 @@ interface Props {
   hasTrend: boolean;
 }
 
-export function PlainTab({ explanation, period, hasPosition, hasTrend }: Props) {
+export function PlainTab({ symbol, explanation, period, hasPosition, hasTrend }: Props) {
   if (!hasPosition && !hasTrend) {
     return (
       <div style={{ padding: "1rem" }}>
@@ -88,6 +90,8 @@ export function PlainTab({ explanation, period, hasPosition, hasTrend }: Props) 
       {/* 흐름 — 또 하나의 사실 덩어리 */}
       {hasTrend && <Statements lines={explanation.trend} />}
 
+      <AiDetail symbol={symbol} period={period} hasPosition={hasPosition} hasTrend={hasTrend} />
+
       {/* 계산하지 못한 쪽이 있으면 침묵하지 않는다 (PP-03) */}
       {(!hasPosition || !hasTrend) && (
         <p
@@ -120,6 +124,166 @@ export function PlainTab({ explanation, period, hasPosition, hasTrend }: Props) 
           다른 종목 검색
         </Link>
       </div>
+    </div>
+  );
+}
+
+type AiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; result: PlainExplanationResponse };
+
+/**
+ * AI(Gemini) 부연 설명 — D-04.
+ *
+ * 위의 규칙 기반 문장(§5.5, §13.2 린트 통과 보장)은 그대로 두고, 그 아래
+ * 접었다 펼치는 섹션으로만 존재한다. 사용자가 직접 펼쳐야 요청이 나간다 —
+ * 자동으로 불러오지 않는다(비용·PP-05 원칙 둘 다 이유).
+ *
+ * 위치 설명과 흐름 설명은 여기서도 각자 다른 카드로 나눈다 — 서버가
+ * 하나의 결론으로 합치지 않게 프롬프트로 강제하지만(§13.2), 화면에서도
+ * 시각적으로 분리해 PP-05 의 취지를 이어간다.
+ */
+function AiDetail({
+  symbol,
+  period,
+  hasPosition,
+  hasTrend,
+}: {
+  symbol: string;
+  period: PeriodDays;
+  hasPosition: boolean;
+  hasTrend: boolean;
+}) {
+  const [state, setState] = useState<AiState>({ status: "idle" });
+
+  if (!hasPosition && !hasTrend) return null;
+
+  const load = () => {
+    setState({ status: "loading" });
+    fetch(`/api/stock/${encodeURIComponent(symbol)}/explain?period=${period}`)
+      .then(async (res) => {
+        const body: unknown = await res.json();
+        if (!res.ok) {
+          const message =
+            typeof body === "object" && body !== null && "error" in body
+              ? ((body as { error: { message?: string } }).error.message ??
+                "AI 설명을 지금은 만들 수 없습니다.")
+              : "AI 설명을 지금은 만들 수 없습니다.";
+          throw new Error(message);
+        }
+        return body as PlainExplanationResponse;
+      })
+      .then((result) => setState({ status: "ready", result }))
+      .catch((err: unknown) => {
+        setState({
+          status: "error",
+          message: err instanceof Error ? err.message : "AI 설명을 지금은 만들 수 없습니다.",
+        });
+      });
+  };
+
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      {state.status === "idle" && (
+        <button
+          type="button"
+          onClick={load}
+          style={{
+            width: "100%",
+            padding: "0.75rem",
+            border: "1px dashed var(--border)",
+            borderRadius: 10,
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          AI 설명 더 보기
+        </button>
+      )}
+
+      {state.status === "loading" && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--text-subtle)" }}>
+          AI가 설명을 만드는 중…
+        </p>
+      )}
+
+      {state.status === "error" && (
+        <div>
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "var(--text-subtle)" }}>
+            {state.message}
+          </p>
+          <button
+            type="button"
+            onClick={load}
+            style={{
+              padding: "0.5rem 0.875rem",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              background: "var(--bg)",
+              color: "var(--text-muted)",
+              fontSize: "0.75rem",
+              cursor: "pointer",
+            }}
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
+      {state.status === "ready" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+          {state.result.positionDetail !== null && (
+            <AiCard title="위치, 조금 더 자세히" text={state.result.positionDetail} />
+          )}
+          {state.result.trendDetail !== null && (
+            <AiCard title="흐름, 조금 더 자세히" text={state.result.trendDetail} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AiCard({ title, text }: { title: string; text: string }) {
+  return (
+    <div
+      style={{
+        padding: "0.875rem",
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          marginBottom: "0.375rem",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "0.625rem",
+            fontWeight: 700,
+            padding: "0.0625rem 0.375rem",
+            borderRadius: 999,
+            background: "var(--surface-strong)",
+            color: "var(--text-muted)",
+          }}
+        >
+          AI
+        </span>
+        <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{title}</span>
+      </div>
+      <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.65, color: "var(--text)" }}>
+        {text}
+      </p>
     </div>
   );
 }

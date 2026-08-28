@@ -19,32 +19,7 @@ import { readFileSync } from "node:fs";
 import { globSync } from "node:fs";
 import { relative } from "node:path";
 
-/**
- * PRD §13.2 "절대 사용 금지 (매매 권유·가치 판단)" 목록 전체.
- * 이 배열을 줄이려면 PRD를 먼저 고쳐야 한다.
- */
-const FORBIDDEN: readonly string[] = [
-  // 매매 행위
-  "매수", "매도", "사다", "팔다", "사세요", "파세요",
-  "진입", "청산", "익절", "손절",
-  // 권유·가치 판단
-  "추천", "유망", "기회", "타이밍", "적기", "좋은 위치", "나쁜 위치",
-  // 가격 평가
-  "저평가", "고평가", "싸다", "비싸다", "저렴", "부담",
-  // 위치 은유 오용
-  "저점", "고점", "바닥", "천장", "무릎에서", "어깨에서",
-  // 예측
-  "목표가", "적정가", "전망", "예상", "예측", "상승할", "하락할",
-  // 투자 맥락의 경고어.
-  // §13.2 단서: "거래정지 배지 등 사실 표시는 예외" → lint-allow 로 개별 허용한다.
-  "주의", "위험",
-];
-
-/** 속담 전체는 마케팅 카피 포함 어디에도 등장할 수 없다 (§13.2, L-06) */
-const FORBIDDEN_PHRASES: readonly string[] = [
-  "무릎에서 사서",
-  "어깨에서 팔",
-];
+import { FORBIDDEN_WORDS as FORBIDDEN, FORBIDDEN_PHRASES } from "../src/lib/forbidden-words";
 
 interface Finding {
   file: string;
@@ -154,10 +129,15 @@ function scanFile(path: string): Finding[] {
 }
 
 function main(): void {
-  // 사용자에게 문구가 노출될 수 있는 모든 소스
+  // 사용자에게 문구가 노출될 수 있는 모든 소스.
+  // forbidden-words.ts 는 이 목록 자체를 정의하는 파일이라 예외다 — 배열
+  // 원소가 사용자 화면에 그대로 나가는 게 아니라 AI 응답을 검사하는 데
+  // 쓰인다(src/lib/ai/plain-explanation.ts). 자기 자신을 검사하면 정의한
+  // 모든 단어가 매번 "위반"으로 잡히는 게 당연하므로 뺀다.
   const files = globSync("src/**/*.{ts,tsx}", { cwd: process.cwd() })
     .map((f) => String(f))
-    .filter((f) => !f.includes(".test."));
+    .filter((f) => !f.includes(".test."))
+    .filter((f) => !f.replace(/\\/g, "/").endsWith("src/lib/forbidden-words.ts"));
 
   const findings = files.flatMap((f) => scanFile(f));
 

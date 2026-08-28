@@ -227,6 +227,7 @@ export function StockScreen({ symbol }: { symbol: string }) {
 
       {tab === "plain" && (
         <PlainTab
+          symbol={data.symbol}
           explanation={explanation}
           period={position.periodDays}
           hasPosition={haltedLabel === null && position.available}

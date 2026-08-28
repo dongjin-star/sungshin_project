@@ -190,7 +190,7 @@ export function WatchlistScreen() {
             </button>
           )}
           <Link
-            href="/search"
+            href="/"
             aria-label="종목 검색"
             style={{
               display: "flex",
@@ -374,7 +374,7 @@ function EmptyState() {
         종목을 담아두면 위치와 흐름을 같은 기준으로 나란히 볼 수 있습니다.
       </p>
       <Link
-        href="/search"
+        href="/"
         style={{
           display: "inline-block",
           padding: "0.75rem 1.25rem",

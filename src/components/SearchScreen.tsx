@@ -92,9 +92,10 @@ export function SearchScreen() {
         <span style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0 }}>
           <ThemeToggle />
           {/* §3.3 검색 재진입의 역방향 — 담은 종목을 보러 돌아가는 길이다.
-              이게 없으면 ♡ 로 담은 뒤 관심종목으로 갈 방법이 없다. */}
+              이게 없으면 ♡ 로 담은 뒤 관심종목으로 갈 방법이 없다. 로그인
+              안 했으면 /watchlist 안의 LoginGate 가 로그인을 요구한다(D-06). */}
           <Link
-            href="/"
+            href="/watchlist"
             style={{
               flexShrink: 0,
               padding: "0.375rem 0.625rem",

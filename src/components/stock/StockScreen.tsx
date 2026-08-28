@@ -307,7 +307,7 @@ function Shell({ symbol, children }: { symbol: string; children: React.ReactNode
     <div>
       <div style={{ padding: "1.25rem 1rem 0" }}>
         <Link
-          href="/search"
+          href="/"
           style={{ fontSize: "0.8125rem", color: "var(--text-muted)", textDecoration: "none" }}
         >
           ← 검색으로

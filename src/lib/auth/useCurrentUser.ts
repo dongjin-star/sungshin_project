@@ -56,7 +56,15 @@ export function useCurrentUser(): CurrentUser {
   return { user, loading };
 }
 
-/** 이메일 로컬 파트를 표시 이름으로 쓴다 — 가입 시 별도 이름을 받지 않는다 */
+/**
+ * 회원가입 때 받은 닉네임(`user_metadata.nickname`)을 우선 쓰고, 없으면
+ * 이메일 로컬 파트로 대체한다 — 닉네임 필드가 생기기 전에 가입한
+ * 계정이거나, 어떤 경로로든 메타데이터가 비어 있는 경우를 위한 대비다.
+ */
 export function displayNameOf(user: User): string {
+  const nickname = user.user_metadata?.nickname;
+  if (typeof nickname === "string" && nickname.trim().length > 0) {
+    return nickname.trim();
+  }
   return user.email?.split("@")[0] ?? "사용자";
 }

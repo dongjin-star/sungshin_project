@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
+import { ThemeToggle } from "./ThemeToggle";
 import { DEFAULT_LIMIT, search, type SearchEntry } from "@/lib/search/match";
 import { useSearchIndex } from "@/lib/search/use-index";
 import { useRecentSearches } from "@/lib/search/recent";
@@ -88,25 +89,28 @@ export function SearchScreen() {
           </p>
         </span>
 
-        {/* §3.3 검색 재진입의 역방향 — 담은 종목을 보러 돌아가는 길이다.
-            이게 없으면 ♡ 로 담은 뒤 관심종목으로 갈 방법이 없다. */}
-        <Link
-          href="/"
-          style={{
-            flexShrink: 0,
-            padding: "0.375rem 0.625rem",
-            marginTop: "0.125rem",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            color: "var(--text-muted)",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-          }}
-        >
-          관심종목
-        </Link>
+        <span style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0 }}>
+          <ThemeToggle />
+          {/* §3.3 검색 재진입의 역방향 — 담은 종목을 보러 돌아가는 길이다.
+              이게 없으면 ♡ 로 담은 뒤 관심종목으로 갈 방법이 없다. */}
+          <Link
+            href="/"
+            style={{
+              flexShrink: 0,
+              padding: "0.375rem 0.625rem",
+              marginTop: "0.125rem",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              color: "var(--text-muted)",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            관심종목
+          </Link>
+        </span>
       </header>
 
       <div style={{ padding: "0 1rem 0.75rem", position: "sticky", top: 0, background: "var(--bg)", zIndex: 10 }}>

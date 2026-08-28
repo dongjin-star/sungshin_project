@@ -3,13 +3,24 @@
 /**
  * 공통 레이아웃·색 토큰 (PRD §5.1)
  *
- * ✅ D-02 결정(2026-08-28): **라이트 고정.** 다크 팔레트는 만들지 않는다.
- *    다만 색을 변수로 빼둔 구조는 유지한다 — 나중에 다크를 넣기로 하면
- *    이 블록만 추가하면 되고, 그때까지 컴포넌트는 raw 색상값을 쓰지 않는다.
+ * ✅ D-03 결정(2026-08-28): **다크 모드 지원.** D-02(라이트 고정)를
+ *    뒤집는다. 모든 색이 처음부터 변수로 빠져 있었기 때문에 실제 변경은
+ *    이 블록 하나 추가로 끝난다 — 컴포넌트는 여전히 raw 색상값을 쓰지
+ *    않는다.
+ *
+ *    전환 조건은 둘 중 하나다.
+ *      · `:root[data-theme="dark"]` — 사용자가 토글로 명시 선택 (`src/lib/theme.ts`,
+ *        `<ThemeToggle>`). localStorage(`posture.theme.v1`)에 저장된다.
+ *      · `prefers-color-scheme: dark` — 사용자가 "시스템 설정 따름"(기본값)일 때,
+ *        위 명시 선택이 `light` 가 아닌 한 기기 설정을 그대로 따른다.
+ *    `layout.tsx` 의 beforeInteractive 스크립트가 두 조건을 React가 뜨기
+ *    전에 미리 적용해 새로고침 시 색이 튀는 것(FOUC)을 막는다.
  *
  * 🔴 §5.1 색상 원칙: **위치·구간에 따라 색을 바꾸지 않는다.**
  *    무릎이 파랗고 어깨가 빨간 식의 표현은 그 자체로 가치 판단이 된다.
- *    색이 의미를 갖는 곳은 등락률 하나뿐이다.
+ *    색이 의미를 갖는 곳은 등락률 하나뿐이다 — 다크 모드에서도 이 원칙은
+ *    그대로다. 등락 색만 어두운 배경에 맞춰 채도를 살짝 올렸을 뿐,
+ *    "상승 빨강/하락 파랑"이라는 의미는 두 모드에서 같다.
  */
 
 :root {
@@ -39,6 +50,50 @@
 
   /* §5.1 기준 폭 */
   --app-width: 480px;
+}
+
+/* 시스템이 다크를 선호하고, 사용자가 라이트를 명시 선택하지 않았을 때 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121316;
+    --surface: #1b1c20;
+    --surface-strong: #232529;
+    --border: #2e3136;
+
+    --text: #f2f3f5;
+    --text-muted: #9aa1ab;
+    --text-subtle: #6b7280;
+
+    --up: #ff5449;
+    --down: #6ea8fe;
+
+    --ma-short: #f2f3f5;
+    --ma-long: #52565d;
+
+    --accent: #f2f3f5;
+    --focus: #6ea8fe;
+  }
+}
+
+/* 사용자가 토글로 다크를 명시 선택 — 시스템 설정과 무관하게 항상 다크 */
+:root[data-theme="dark"] {
+  --bg: #121316;
+  --surface: #1b1c20;
+  --surface-strong: #232529;
+  --border: #2e3136;
+
+  --text: #f2f3f5;
+  --text-muted: #9aa1ab;
+  --text-subtle: #6b7280;
+
+  --up: #ff5449;
+  --down: #6ea8fe;
+
+  --ma-short: #f2f3f5;
+  --ma-long: #52565d;
+
+  --accent: #f2f3f5;
+  --focus: #6ea8fe;
 }
 
 html {

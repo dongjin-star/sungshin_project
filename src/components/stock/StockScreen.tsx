@@ -20,6 +20,7 @@ import { PlainTab } from "./PlainTab";
 import { PositionTab } from "./PositionTab";
 import { TrendTab } from "./TrendTab";
 import { WatchButton } from "./WatchButton";
+import { ThemeToggle } from "../ThemeToggle";
 import { formatAsOf, formatChangeRate, formatPrice } from "@/lib/format";
 import { usePreferences } from "@/lib/preferences";
 import type { PeriodDays, StockAnalysisResponse } from "@/lib/types";
@@ -273,7 +274,8 @@ function Header({ data }: { data: StockAnalysisResponse }) {
         </span>
 
         {/* §5.3 CTA — 관심종목 추가 */}
-        <span style={{ marginLeft: "auto" }}>
+        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <ThemeToggle />
           <WatchButton symbol={data.symbol} name={data.name} />
         </span>
       </div>

@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { WatchlistRow } from "./WatchlistRow";
 import { PeriodToggle } from "../stock/PeriodToggle";
+import { ThemeToggle } from "../ThemeToggle";
 import { usePreferences } from "@/lib/preferences";
 import { SORT_LABELS, sortWatchlist, type SortMode } from "@/lib/watchlist/sort";
 import { MAX_WATCHLIST, useWatchlist } from "@/lib/watchlist/store";
@@ -150,6 +151,7 @@ export function WatchlistScreen() {
         </h1>
 
         <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <ThemeToggle />
           {watchlist.items.length > 0 && (
             <button
               type="button"

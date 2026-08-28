@@ -42,9 +42,19 @@ const THEME_INIT_SCRIPT = `
  */
 const GA_MEASUREMENT_ID = "G-BRFJKQE9E4";
 
+/**
+ * 카카오톡 등 링크 미리보기(OG 태그)의 기준 도메인.
+ *
+ * OG 이미지 URL은 절대경로여야 카톡 크롤러가 제대로 읽는다 —
+ * `metadataBase` 없이 상대경로만 주면 Next가 빌드 경고를 내고, 크롤러가
+ * 이미지를 못 찾을 수 있다.
+ */
+const SITE_URL = "https://sungshin-project.vercel.app";
+
 export const metadata: Metadata = {
   title: "POSTURE",
   description: "지금 이 종목이 최근 흐름에서 어디쯤인지 보여줍니다.",
+  metadataBase: new URL(SITE_URL),
   // PWA — 홈 화면 설치.
   manifest: "/manifest.json",
   icons: {
@@ -55,6 +65,18 @@ export const metadata: Metadata = {
     // iOS는 manifest.json 을 안 읽는다 — 별도 태그가 있어야 홈 화면
     // 아이콘이 붙는다.
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  // 카카오톡 링크 공유 미리보기 (D-08, 2026-08-28). 사이트 <title>은
+  // "POSTURE"로 그대로 두고(내부/PRD 코드네임), 공개 공유 카드에만
+  // manifest.json 과 같은 공개용 이름 "무사어팔"을 쓴다.
+  openGraph: {
+    title: "무사어팔",
+    description: "지금 이 종목이 최근 흐름에서 어디쯤인지 보여줍니다.",
+    siteName: "무사어팔",
+    url: SITE_URL,
+    type: "website",
+    locale: "ko_KR",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "무사어팔" }],
   },
 };
 

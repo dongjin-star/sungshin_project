@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@next/third-parties": "^15.5.24",
+    "@supabase/supabase-js": "^2.112.4",
     "@tanstack/query-sync-storage-persister": "^5.62.0",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-query-persist-client": "^5.62.0",

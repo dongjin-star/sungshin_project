@@ -2,18 +2,24 @@
  * 관심종목 추가·삭제 (PRD F-WATCH-01, §5.3 CTA)
  *
  * 정원(20종목)이 찼을 때 **조용히 실패하지 않는다.** 눌렀는데 아무 일도
- * 일어나지 않으면 사용자는 앱이 고장난 줄 안다 (PP-03).
+ * 일어나지 않으면 사용자는 앱이 고장난 줄 안다 (PP-03). 같은 이유로
+ * 로그인 안 한 사용자가 눌러도 아무 반응이 없으면 안 된다 — 로그인
+ * 모달을 바로 띄운다 (2026-08-28).
  */
 
 "use client";
 
 import { useEffect, useState } from "react";
 
+import { AuthModal } from "@/components/auth/AuthModal";
+import { useCurrentUser } from "@/lib/auth/useCurrentUser";
 import { MAX_WATCHLIST, useWatchlist } from "@/lib/watchlist/store";
 
 export function WatchButton({ symbol, name }: { symbol: string; name: string }) {
   const watchlist = useWatchlist();
+  const { user, loading: authLoading } = useCurrentUser();
   const [full, setFull] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const watched = watchlist.has(symbol);
 
@@ -26,7 +32,7 @@ export function WatchButton({ symbol, name }: { symbol: string; name: string }) 
 
   // localStorage 를 읽기 전에는 상태를 단정하지 않는다 — 담긴 종목인데
   // 빈 하트가 잠깐 보였다가 채워지면 눈에 띈다.
-  if (!watchlist.ready) {
+  if (!watchlist.ready || authLoading) {
     return <span style={{ width: 40, height: 40, flexShrink: 0 }} aria-hidden="true" />;
   }
 
@@ -35,6 +41,10 @@ export function WatchButton({ symbol, name }: { symbol: string; name: string }) 
       <button
         type="button"
         onClick={() => {
+          if (!user) {
+            setAuthModalOpen(true);
+            return;
+          }
           if (watched) {
             watchlist.remove(symbol);
             return;
@@ -43,7 +53,11 @@ export function WatchButton({ symbol, name }: { symbol: string; name: string }) 
         }}
         aria-pressed={watched}
         aria-label={
-          watched ? `${name} 관심종목에서 빼기` : `${name} 관심종목에 담기`
+          !user
+            ? "로그인 후 관심종목에 담을 수 있습니다"
+            : watched
+              ? `${name} 관심종목에서 빼기`
+              : `${name} 관심종목에 담기`
         }
         style={{
           display: "flex",
@@ -84,6 +98,8 @@ export function WatchButton({ symbol, name }: { symbol: string; name: string }) 
           관심종목은 {MAX_WATCHLIST}개까지 담을 수 있습니다. 먼저 다른 종목을 빼주세요.
         </span>
       )}
+
+      {authModalOpen && <AuthModal onClose={() => setAuthModalOpen(false)} />}
     </span>
   );
 }

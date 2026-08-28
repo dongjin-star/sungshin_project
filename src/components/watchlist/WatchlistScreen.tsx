@@ -24,6 +24,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WatchlistRow } from "./WatchlistRow";
 import { PeriodToggle } from "../stock/PeriodToggle";
 import { ThemeToggle } from "../ThemeToggle";
+import { AuthButton } from "../auth/AuthButton";
+import { AuthModal } from "../auth/AuthModal";
+import { useCurrentUser } from "@/lib/auth/useCurrentUser";
 import { usePreferences } from "@/lib/preferences";
 import { SORT_LABELS, sortWatchlist, type SortMode } from "@/lib/watchlist/sort";
 import { MAX_WATCHLIST, useWatchlist } from "@/lib/watchlist/store";
@@ -37,6 +40,7 @@ type LoadState =
 
 export function WatchlistScreen() {
   const watchlist = useWatchlist();
+  const { user, loading: authLoading } = useCurrentUser();
   const { prefs, ready: prefsReady, update } = usePreferences();
 
   const [state, setState] = useState<LoadState>({ status: "idle" });
@@ -52,7 +56,14 @@ export function WatchlistScreen() {
   const lastItems = useRef<WatchlistItem[]>([]);
 
   useEffect(() => {
-    if (!watchlist.ready || !prefsReady) return;
+    if (!watchlist.ready || !prefsReady || authLoading) return;
+    // 로그인 안 한 사용자에게는 관심종목 자체를 보여주지 않는다 — 시세를
+    // 받아올 이유가 없다. 로그아웃 시 낡은 데이터가 남지 않게 초기화한다.
+    if (!user) {
+      lastItems.current = [];
+      setState({ status: "idle" });
+      return;
+    }
     if (symbolKey.length === 0) {
       lastItems.current = [];
       setState({ status: "ready", items: [] });
@@ -96,7 +107,7 @@ export function WatchlistScreen() {
       alive = false;
       controller.abort();
     };
-  }, [symbolKey, period, watchlist.ready, prefsReady, attempt]);
+  }, [symbolKey, period, watchlist.ready, prefsReady, authLoading, user, attempt]);
 
   const addedAt = useMemo(
     () => new Map(watchlist.items.map((i) => [i.symbol, i.addedAt])),
@@ -127,32 +138,40 @@ export function WatchlistScreen() {
 
   return (
     <div>
+      {/* 계정 상태 — 헤더 아이콘 줄과 분리해 좁은 화면에서도 안 겹치게 한다 */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "0.625rem 1rem 0" }}>
+        <AuthButton />
+      </div>
+
       <header
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "1rem",
-          padding: "1.25rem 1rem 0.75rem",
+          padding: "0.625rem 1rem 0.75rem",
         }}
       >
         <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
           관심종목
-          <span
-            style={{
-              marginLeft: "0.375rem",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              color: "var(--text-subtle)",
-            }}
-          >
-            {watchlist.items.length}/{MAX_WATCHLIST}
-          </span>
+          {/* 로그인 안 했으면 개수도 보여주지 않는다 — 아래 목록 자체를 가리는 것과 같은 이유 */}
+          {user && (
+            <span
+              style={{
+                marginLeft: "0.375rem",
+                fontSize: "0.8125rem",
+                fontWeight: 500,
+                color: "var(--text-subtle)",
+              }}
+            >
+              {watchlist.items.length}/{MAX_WATCHLIST}
+            </span>
+          )}
         </h1>
 
         <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
           <ThemeToggle />
-          {watchlist.items.length > 0 && (
+          {user && watchlist.items.length > 0 && (
             <button
               type="button"
               onClick={() => setEditing((v) => !v)}
@@ -190,7 +209,9 @@ export function WatchlistScreen() {
         </span>
       </header>
 
-      {watchlist.ready && watchlist.items.length === 0 ? (
+      {authLoading ? null : !user ? (
+        <LoginGate />
+      ) : watchlist.ready && watchlist.items.length === 0 ? (
         <EmptyState />
       ) : (
         <>
@@ -288,6 +309,50 @@ export function WatchlistScreen() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * 비로그인 사용자에게 보여주는 관심종목 자리 (2026-08-28).
+ *
+ * 검색·위치·흐름 조회는 로그인 없이도 그대로 되지만, 관심종목만은 로그인한
+ * 사람만 보고 담을 수 있다 — 여기서 리스트 자체를 아예 렌더링하지 않는다.
+ */
+function LoginGate() {
+  const [modalOpen, setModalOpen] = useState(false);
+  return (
+    <div style={{ padding: "2.5rem 1.5rem", textAlign: "center" }}>
+      <p style={{ margin: 0, fontSize: "0.9375rem", fontWeight: 600 }}>로그인이 필요합니다</p>
+      <p
+        style={{
+          margin: "0.5rem 0 1.5rem",
+          fontSize: "0.8125rem",
+          color: "var(--text-muted)",
+          lineHeight: 1.6,
+        }}
+      >
+        관심종목은 로그인한 회원만 담고 볼 수 있습니다. 종목 검색과 조회는 로그인 없이도 그대로
+        이용하실 수 있습니다.
+      </p>
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        style={{
+          display: "inline-block",
+          padding: "0.75rem 1.25rem",
+          border: "none",
+          borderRadius: 10,
+          background: "var(--accent)",
+          color: "var(--bg)",
+          fontSize: "0.875rem",
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        로그인
+      </button>
+      {modalOpen && <AuthModal onClose={() => setModalOpen(false)} />}
     </div>
   );
 }

@@ -21,7 +21,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { ExplanationSet } from "@/lib/templates";
 import type { PeriodDays, PlainExplanationResponse } from "@/lib/types";
@@ -129,19 +129,17 @@ export function PlainTab({ symbol, explanation, period, hasPosition, hasTrend }:
 }
 
 type AiState =
+  | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; result: PlainExplanationResponse };
 
 /**
- * AI(Gemini) 부연 설명 — D-04, D-07(자동 생성, 2026-08-28).
+ * AI(Gemini) 부연 설명 — D-04.
  *
- * 처음엔 "AI 설명 더 보기" 버튼을 눌러야 요청이 나가게 했다(비용 절감
- * 목적). 그런데 누르고 나서 기다리는 체감 시간이 길다는 피드백을 받고
- * 자동 생성으로 바꿨다 — "쉬운 설명" 탭을 열면 바로 로딩을 시작해,
- * 사용자가 위의 규칙 기반 문장을 읽는 동안 뒤에서 준비되게 한다. 비용은
- * 늘지만(탭을 열 때마다 1회 호출) 체감 대기시간이 이득이 더 크다는
- * 판단이다.
+ * 위의 규칙 기반 문장(§5.5, §13.2 린트 통과 보장)은 그대로 두고, 그 아래
+ * 접었다 펼치는 섹션으로만 존재한다. 사용자가 직접 펼쳐야 요청이 나간다 —
+ * 자동으로 불러오지 않는다(비용·PP-05 원칙 둘 다 이유).
  *
  * 위치 설명과 흐름 설명은 여기서도 각자 다른 카드로 나눈다 — 서버가
  * 하나의 결론으로 합치지 않게 프롬프트로 강제하지만(§13.2), 화면에서도
@@ -158,19 +156,13 @@ function AiDetail({
   hasPosition: boolean;
   hasTrend: boolean;
 }) {
-  const [state, setState] = useState<AiState>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<AiState>({ status: "idle" });
 
-  useEffect(() => {
-    if (!hasPosition && !hasTrend) return;
+  if (!hasPosition && !hasTrend) return null;
 
-    const controller = new AbortController();
-    let alive = true;
+  const load = () => {
     setState({ status: "loading" });
-
-    fetch(`/api/stock/${encodeURIComponent(symbol)}/explain?period=${period}`, {
-      signal: controller.signal,
-    })
+    fetch(`/api/stock/${encodeURIComponent(symbol)}/explain?period=${period}`)
       .then(async (res) => {
         const body: unknown = await res.json();
         if (!res.ok) {
@@ -183,34 +175,39 @@ function AiDetail({
         }
         return body as PlainExplanationResponse;
       })
-      .then((result) => {
-        if (!alive) return;
-        setState({ status: "ready", result });
-      })
+      .then((result) => setState({ status: "ready", result }))
       .catch((err: unknown) => {
-        if (!alive) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
         setState({
           status: "error",
           message: err instanceof Error ? err.message : "AI 설명을 지금은 만들 수 없습니다.",
         });
       });
-
-    return () => {
-      alive = false;
-      controller.abort();
-    };
-  }, [symbol, period, hasPosition, hasTrend, attempt]);
-
-  if (!hasPosition && !hasTrend) return null;
+  };
 
   return (
     <div style={{ marginTop: "1rem" }}>
-      {state.status === "loading" && (
-        <p
-          className="skeleton-pulse"
-          style={{ margin: 0, fontSize: "0.8125rem", color: "var(--text-subtle)" }}
+      {state.status === "idle" && (
+        <button
+          type="button"
+          onClick={load}
+          style={{
+            width: "100%",
+            padding: "0.75rem",
+            border: "1px dashed var(--border)",
+            borderRadius: 10,
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
         >
+          AI 설명 더 보기
+        </button>
+      )}
+
+      {state.status === "loading" && (
+        <p style={{ margin: 0, fontSize: "0.8125rem", color: "var(--text-subtle)" }}>
           AI가 설명을 만드는 중…
         </p>
       )}
@@ -222,7 +219,7 @@ function AiDetail({
           </p>
           <button
             type="button"
-            onClick={() => setAttempt((n) => n + 1)}
+            onClick={load}
             style={{
               padding: "0.5rem 0.875rem",
               border: "1px solid var(--border)",

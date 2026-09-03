@@ -1,0 +1,64 @@
+# Supabase 무료 플랜 프로젝트가 "비활동"으로 일시정지되지 않게 막는 워크플로.
+#
+# Supabase는 일정 기간(무료 플랜 기준 약 1주) 요청이 하나도 없으면 프로젝트를
+# 자동으로 pause 시킨다. 되살리려면 대시보드에서 수동으로 restore 해야 하고,
+# 그 사이 로그인 기능이 통째로 죽는다. 그래서 3일에 한 번 실제 DB 쿼리
+# (public.keep_alive 에서 1행 SELECT)를 날려 활동 기록을 남긴다.
+#
+# 필요한 저장소 Secrets (Settings > Secrets and variables > Actions):
+#   SUPABASE_URL              - 예: https://xxxxxxxx.supabase.co  (끝에 / 없이)
+#   SUPABASE_PUBLISHABLE_KEY  - 예전 anon key 와 같은 성격의 공개 키
+# 값은 .env.local 의 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+# 와 동일하다. 코드에 하드코딩하지 않고 여기서만 읽는다.
+
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # 3일마다 00:17 UTC (= 한국시간 09:17). 정각을 피한 건 GitHub의
+    # 예약 실행이 정각에 몰려 지연되는 걸 줄이기 위해서다.
+    - cron: "17 0 */3 * *"
+  # 시크릿 설정 직후 바로 확인하고 싶을 때 수동 실행용
+  workflow_dispatch:
+
+# 이 워크플로는 저장소 내용을 읽지도 쓰지도 않는다.
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase (select 1 row)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_PUBLISHABLE_KEY}" ]; then
+            echo "::error::SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY 시크릿이 설정되지 않았습니다."
+            exit 1
+          fi
+
+          # 뒤에 붙은 슬래시를 떼어 // 가 생기는 걸 막는다
+          base="${SUPABASE_URL%/}"
+
+          # -sS: 진행바는 끄고 에러는 보이게 / -f 는 쓰지 않는다 —
+          # 실패해도 응답 본문을 로그에 남겨야 원인을 알 수 있기 때문.
+          status=$(curl -sS -o /tmp/response.txt -w '%{http_code}' \
+            --retry 3 --retry-delay 10 --retry-all-errors --max-time 30 \
+            "${base}/rest/v1/keep_alive?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+            -H "Accept: application/json")
+
+          echo "HTTP ${status}"
+          cat /tmp/response.txt
+
+          if [ "${status}" != "200" ]; then
+            echo "::error::Supabase keep-alive 요청 실패 (HTTP ${status})"
+            exit 1
+          fi
+
+          echo "Supabase keep-alive 성공"

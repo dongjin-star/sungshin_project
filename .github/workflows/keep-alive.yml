@@ -6,8 +6,8 @@
 # (public.keep_alive 에서 1행 SELECT)를 날려 활동 기록을 남긴다.
 #
 # 필요한 저장소 Secrets (Settings > Secrets and variables > Actions):
-#   SUPABASE_URL              - 예: https://xxxxxxxx.supabase.co  (끝에 / 없이)
-#   SUPABASE_PUBLISHABLE_KEY  - 예전 anon key 와 같은 성격의 공개 키
+#   NEXT_PUBLIC_SUPABASE_URL              - 예: https://xxxxxxxx.supabase.co  (끝에 / 없이)
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY  - 예전 anon key 와 같은 성격의 공개 키
 # 값은 .env.local 의 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 # 와 동일하다. 코드에 하드코딩하지 않고 여기서만 읽는다.
 
@@ -31,13 +31,13 @@ jobs:
     steps:
       - name: Ping Supabase (select 1 row)
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
 
           if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_PUBLISHABLE_KEY}" ]; then
-            echo "::error::SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY 시크릿이 설정되지 않았습니다."
+            echo "::error::NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY 시크릿이 설정되지 않았습니다."
             exit 1
           fi
 
